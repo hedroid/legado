@@ -21,7 +21,7 @@ import java.time.format.DateTimeFormatter
 
 object AppUpdateGitHub : AppUpdate.AppUpdateInterface {
 
-    private const val repoPath = "HapeLee/legado-with-MD3"
+    private const val repoPath = "hedroid/legado"
     private const val githubApiBaseUrl = "https://api.github.com/repos/$repoPath/releases"
     private const val updateManifestBaseUrl =
         "https://raw.githubusercontent.com/$repoPath/update-manifests"
@@ -177,28 +177,41 @@ object AppUpdateGitHub : AppUpdate.AppUpdateInterface {
 
     private fun Request.Builder.addGithubApiHeaders() {
         header("Accept", "application/vnd.github+json")
-        header("X-GitHub-Api-Version", "2026-03-10")
+        header("X-GitHub-Api-Version", "2022-11-28")
     }
 
     override fun check(scope: CoroutineScope): Coroutine<AppUpdate.UpdateInfo> {
         return Coroutine.async(scope) {
             val currentVersion = AppConst.appInfo.versionName
             val variant = checkVariant
-            val releases = getLatestRelease(variant)
-
-            val filtered = if (variant == AppVariant.ALL) {
-                releases
-            } else {
-                releases.filter { it.appVariant == variant }
+            val updateVariant = when (variant) {
+                AppVariant.BETA_RELEASE -> AppVariant.ALL
+                else -> variant
             }
+            val releases = getLatestRelease(updateVariant)
 
-            val latest = filtered.firstOrNull { r ->
-                try {
-                    r.versionName.versionCompare(currentVersion) > 0
-                } catch (_: Exception) {
-                    false
+            val filtered = when (variant) {
+                AppVariant.OFFICIAL -> releases.filter { it.appVariant == AppVariant.OFFICIAL }
+                AppVariant.BETA_RELEASE -> releases.filter {
+                    it.appVariant == AppVariant.OFFICIAL || it.appVariant == AppVariant.BETA_RELEASE
                 }
+                AppVariant.ALL -> releases
+                else -> releases.filter { it.appVariant == variant }
             }
+
+            val latest = filtered
+                .filter { r ->
+                    try {
+                        r.versionName.versionCompare(currentVersion) > 0
+                    } catch (_: Exception) {
+                        false
+                    }
+                }
+                .maxWithOrNull(
+                    compareBy<AppReleaseInfo> { SemVer.parse(it.versionName) }
+                        .thenBy { if (it.appVariant == AppVariant.OFFICIAL) 1 else 0 }
+                        .thenBy { it.createdAt }
+                )
 
             if (latest != null) {
                 return@async AppUpdate.UpdateInfo(

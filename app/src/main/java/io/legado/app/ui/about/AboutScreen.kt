@@ -4,7 +4,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -117,27 +116,26 @@ private fun MaterialAboutScreen(
                     }
             )
             val appName = stringResource(R.string.app_name)
-            Row(
+            Text(
+                text = appName,
+                style = LegadoTheme.typography.bodyLarge,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .wrapContentWidth(Alignment.CenterHorizontally)
+            )
+            Text(
+                text = versionName,
+                style = LegadoTheme.typography.bodyLarge,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Normal,
                 modifier = Modifier
                     .fillMaxWidth()
                     .wrapContentWidth(Alignment.CenterHorizontally)
                     .clickable { onIntent(AboutIntent.CheckUpdate) }
-                    .padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = appName,
-                    style = LegadoTheme.typography.bodyLarge,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = " $versionName",
-                    style = LegadoTheme.typography.bodyLarge,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Normal,
-                )
-            }
+                    .padding(vertical = 4.dp)
+            )
 
             SplicedColumnGroup(
                 modifier = Modifier.padding(horizontal = 16.dp),
