@@ -8,7 +8,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -285,7 +284,7 @@ private fun AboutContent(
                 )
             }
             val appName = stringResource(R.string.app_name)
-            Row(
+            Text(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 12.dp, bottom = 5.dp)
@@ -310,27 +309,22 @@ private fun AboutContent(
                         } else {
                             Modifier
                         },
-                    )
+                    ),
+                text = appName,
+                color = MiuixTheme.colorScheme.onBackground,
+                fontWeight = FontWeight.Bold,
+                fontSize = 35.sp,
+                textAlign = TextAlign.Center,
+            )
+            Text(
+                modifier = Modifier
+                    .fillMaxWidth()
                     .clickable { onIntent(AboutIntent.CheckUpdate) },
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    modifier = Modifier.weight(1f),
-                    text = appName,
-                    color = MiuixTheme.colorScheme.onBackground,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 35.sp,
-                    textAlign = TextAlign.End,
-                )
-                Text(
-                    modifier = Modifier.weight(1f),
-                    text = " $versionName",
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                    fontWeight = FontWeight.Normal,
-                    fontSize = 14.sp,
-                    textAlign = TextAlign.Start,
-                )
-            }
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                text = versionName,
+                fontSize = 14.sp,
+                textAlign = TextAlign.Center,
+            )
         }
 
         // Scrollable content
