@@ -1,0 +1,67 @@
+name: Sync upstream
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 每天北京时间 02:00 同步上游 main
+    - cron: '0 18 * * *'
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: sync-upstream-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.repository == 'hedroid/legado'
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.merge.outputs.changed }}
+    steps:
+      - name: Checkout current repository
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Merge upstream main
+        id: merge
+        run: |
+          BEFORE_SHA=$(git rev-parse HEAD)
+          git remote add upstream https://github.com/HapeLee/legado-with-MD3.git
+          git fetch upstream main
+          git merge --no-edit upstream/main
+          AFTER_SHA=$(git rev-parse HEAD)
+
+          if [[ "$BEFORE_SHA" == "$AFTER_SHA" ]]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "上游没有新的可合并提交。"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "已同步新提交: $BEFORE_SHA -> $AFTER_SHA"
+          fi
+
+      - name: Push changes
+        if: steps.merge.outputs.changed == 'true'
+        run: git push origin main
+
+  publish:
+    needs: sync
+    if: needs.sync.outputs.changed == 'true'
+    uses: ./.github/workflows/auto-release.yml
+    with:
+      publish: true
+      allow_automatic_release: true
+      force_release_cadence: false
+      min_pre_release_days: 2
+      checkout_ref: main
+    secrets: inherit

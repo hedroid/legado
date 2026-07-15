@@ -1,10 +1,9 @@
 package io.legado.app.ui.about
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -14,8 +13,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,7 +26,10 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.legado.app.R
@@ -39,7 +40,6 @@ import io.legado.app.ui.widget.components.AppScaffold
 import io.legado.app.ui.widget.components.SettingItemWithDivider
 import io.legado.app.ui.widget.components.SplicedColumnGroup
 import io.legado.app.ui.widget.components.alert.AppAlertDialog
-import io.legado.app.ui.widget.components.card.TextCard
 import io.legado.app.ui.widget.components.log.CrashLogSheet
 import io.legado.app.ui.widget.components.progressIndicator.AppCircularProgressIndicator
 import io.legado.app.ui.widget.components.settingItem.SettingItem
@@ -114,56 +114,32 @@ private fun MaterialAboutScreen(
                     .height(120.dp)
                     .width(160.dp)
                     .align(Alignment.CenterHorizontally)
+                    .clickable {
+                        onIntent(AboutIntent.OpenUrl("https://github.com/hedroid/legado"))
+                    }
             )
-            AppText(
-                text = stringResource(R.string.app_name),
+            val appName = stringResource(R.string.app_name)
+            Text(
+                text = buildAnnotatedString {
+                    append(appName)
+                    append(" ")
+                    withStyle(
+                        SpanStyle(
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Normal,
+                        )
+                    ) {
+                        append(versionName)
+                    }
+                },
                 style = LegadoTheme.typography.bodyLarge,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier
                     .fillMaxWidth()
                     .wrapContentWidth(Alignment.CenterHorizontally)
+                    .clickable { onIntent(AboutIntent.CheckUpdate) }
             )
-            TextCard(
-                text = versionName,
-                cornerRadius = 8.dp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .wrapContentWidth(Alignment.CenterHorizontally)
-                    .padding(vertical = 4.dp)
-            )
-            AppText(
-                text = stringResource(R.string.about_description),
-                style = LegadoTheme.typography.bodyLarge,
-                fontSize = 12.sp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .wrapContentWidth(Alignment.CenterHorizontally)
-                    .padding(bottom = 4.dp)
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center
-            ) {
-                FilledTonalIconButton(onClick = { onIntent(AboutIntent.OpenUrl("https://github.com/HapeLee/legado-with-MD3")) }) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_web_outline),
-                        contentDescription = stringResource(R.string.about_open_project_homepage)
-                    )
-                }
-                FilledTonalIconButton(onClick = { onIntent(AboutIntent.OpenUrl("https://github.com/HapeLee/legado-with-MD3")) }) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_github),
-                        contentDescription = stringResource(R.string.about_open_github)
-                    )
-                }
-                FilledTonalIconButton(onClick = { onIntent(AboutIntent.CheckUpdate) }) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_import),
-                        contentDescription = stringResource(R.string.check_update)
-                    )
-                }
-            }
 
             SplicedColumnGroup(
                 modifier = Modifier.padding(horizontal = 16.dp),
@@ -171,8 +147,8 @@ private fun MaterialAboutScreen(
             ) {
                 SettingItemWithDivider {
                     SettingItem(
-                        title = stringResource(R.string.contributors),
-                        onClick = { onIntent(AboutIntent.OpenUrl("https://github.com/HapeLee/legado-with-MD3")) }
+                        title = stringResource(R.string.github_project_url),
+                        onClick = { onIntent(AboutIntent.OpenUrl("https://github.com/hedroid/legado")) }
                     )
                 }
                 SettingItemWithDivider {

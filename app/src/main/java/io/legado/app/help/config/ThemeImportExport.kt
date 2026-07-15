@@ -7,6 +7,7 @@ import com.google.gson.GsonBuilder
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
+import io.legado.app.help.LauncherIconHelp
 import io.legado.app.ui.config.coverConfig.CoverConfig
 import io.legado.app.ui.config.themeConfig.ThemeConfig
 import io.legado.app.utils.EncoderUtils
@@ -314,7 +315,7 @@ object ThemeImportExport {
         ThemeConfig.materialVersion = data.materialVersion
         ThemeConfig.customMode = data.customMode
         ThemeConfig.customContrast = data.customContrast
-        ThemeConfig.launcherIcon = data.launcherIcon
+        ThemeConfig.launcherIcon = LauncherIconHelp.normalizeIcon(data.launcherIcon) ?: "ic_launcher"
         ThemeConfig.isPredictiveBackEnabled = data.isPredictiveBackEnabled
         ThemeConfig.fontScale = data.fontScale
 

@@ -35,22 +35,6 @@
         android:supportsRtl="true"
         android:theme="@style/Base.AppTheme"
         tools:ignore="AllowBackup,GoogleAppIndexingWarning,UnusedAttribute">
-        <!-- 图标0 -->
-        <activity
-            android:name=".ui.main.LauncherW"
-            android:enabled="false"
-            android:exported="true"
-            android:icon="@mipmap/launcherw">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-                <action android:name="com.samsung.android.support.REMOTE_ACTION" />
-            </intent-filter>
-
-            <meta-data
-                android:name="com.samsung.android.support.REMOTE_ACTION"
-                android:resource="@xml/spen_remote_actions" />
-        </activity>
         <activity
             android:name=".ui.main.Launcher0"
             android:enabled="false"
@@ -120,38 +104,6 @@
             android:enabled="false"
             android:exported="true"
             android:icon="@mipmap/launcher4">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-                <action android:name="com.samsung.android.support.REMOTE_ACTION" />
-            </intent-filter>
-
-            <meta-data
-                android:name="com.samsung.android.support.REMOTE_ACTION"
-                android:resource="@xml/spen_remote_actions" />
-        </activity>
-        <!-- 图标5 -->
-        <activity
-            android:name=".ui.main.Launcher5"
-            android:enabled="false"
-            android:exported="true"
-            android:icon="@mipmap/launcher5">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-                <action android:name="com.samsung.android.support.REMOTE_ACTION" />
-            </intent-filter>
-
-            <meta-data
-                android:name="com.samsung.android.support.REMOTE_ACTION"
-                android:resource="@xml/spen_remote_actions" />
-        </activity>
-        <!-- 图标6 -->
-        <activity
-            android:name=".ui.main.Launcher6"
-            android:enabled="false"
-            android:exported="true"
-            android:icon="@mipmap/launcher6">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

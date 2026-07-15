@@ -21,6 +21,18 @@ val versionProps = Properties().apply {
         load(FileInputStream(versionPropsFile))
     }
 }
+val localPropsFile = rootProject.file("local.properties")
+val localProps = Properties().apply {
+    if (localPropsFile.exists()) {
+        load(FileInputStream(localPropsFile))
+    }
+}
+
+fun signingProperty(name: String): String? {
+    return (project.findProperty(name) as? String)?.takeIf { it.isNotBlank() }
+        ?: localProps.getProperty(name)?.takeIf { it.isNotBlank() }
+        ?: System.getenv(name)?.takeIf { it.isNotBlank() }
+}
 
 val versionMajor = versionProps["VERSION_MAJOR"]?.toString()?.toInt() ?: 0
 val versionMinor = versionProps["VERSION_MINOR"]?.toString()?.toInt() ?: 0
@@ -33,12 +45,12 @@ android {
     namespace = "io.legado.app"
 
     signingConfigs {
-        if (project.hasProperty("RELEASE_STORE_FILE")) {
+        signingProperty("RELEASE_STORE_FILE")?.let { releaseStoreFile ->
             create("myConfig") {
-                storeFile = file(project.property("RELEASE_STORE_FILE") as String)
-                storePassword = project.property("RELEASE_STORE_PASSWORD") as String
-                keyAlias = project.property("RELEASE_KEY_ALIAS") as String
-                keyPassword = project.property("RELEASE_KEY_PASSWORD") as String
+                storeFile = file(releaseStoreFile)
+                storePassword = signingProperty("RELEASE_STORE_PASSWORD")
+                keyAlias = signingProperty("RELEASE_KEY_ALIAS")
+                keyPassword = signingProperty("RELEASE_KEY_PASSWORD")
                 enableV1Signing = true
                 enableV2Signing = true
                 enableV3Signing = true
@@ -48,7 +60,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "io.legato.kazusa"
+        applicationId = "com.github.legato"
         minSdk = 26
         targetSdk = 37
         versionCode = System.getenv("COMMIT_NUMBER")?.toInt()?.let { 10000 + it } ?: 32640
@@ -81,7 +93,7 @@ android {
 
     buildTypes {
         getByName("release") {
-            if (project.hasProperty("RELEASE_STORE_FILE")) {
+            if (signingProperty("RELEASE_STORE_FILE") != null) {
                 signingConfig = signingConfigs.getByName("myConfig")
             }
             manifestPlaceholders["app_name"] = "@string/app_name"
@@ -102,7 +114,7 @@ android {
         }
         getByName("debug") {
             applicationIdSuffix = ".debug"
-            if (project.hasProperty("RELEASE_STORE_FILE")) {
+            if (signingProperty("RELEASE_STORE_FILE") != null) {
                 signingConfig = signingConfigs.getByName("myConfig")
             }
             manifestPlaceholders["app_name"] = "@string/app_name"
