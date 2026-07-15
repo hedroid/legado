@@ -2,6 +2,16 @@ name: Release APK
 
 on:
   workflow_dispatch:
+    inputs:
+      confirm_release:
+        description: '正式版确认词：VERSION_SUFFIX=0 时必须输入 RELEASE x.y.z，例如 RELEASE 3.26.13'
+        required: false
+        type: string
+      force_release_cadence:
+        description: '跳过正式版至少等待 2 天的节奏检查'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   actions: read
@@ -9,8 +19,11 @@ permissions:
 
 jobs:
   release:
-    if: github.actor == 'HapeLee' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main'
     uses: ./.github/workflows/auto-release.yml
     with:
       publish: true
+      confirm_release: ${{ inputs.confirm_release }}
+      force_release_cadence: ${{ inputs.force_release_cadence }}
+      min_pre_release_days: 2
     secrets: inherit

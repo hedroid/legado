@@ -520,11 +520,8 @@ open class MainActivity : BaseComposeActivity(), VariableDialog.Callback {
 
 }
 
-class LauncherW : MainActivity()
 class Launcher1 : MainActivity()
 class Launcher2 : MainActivity()
 class Launcher3 : MainActivity()
 class Launcher4 : MainActivity()
-class Launcher5 : MainActivity()
-class Launcher6 : MainActivity()
 class Launcher0 : MainActivity()

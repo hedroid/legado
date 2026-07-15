@@ -4,6 +4,7 @@ package io.legado.app.ui.about
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -21,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text as MaterialText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.derivedStateOf
@@ -38,8 +40,11 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -236,7 +241,6 @@ private fun AboutContent(
     val density = LocalDensity.current
     var logoHeightDp by remember { mutableStateOf(300.dp) }
 
-    val versionCodeProgress = ((scrollProgress - 0.05f) / 0.15f).coerceIn(0f, 1f)
     val projectNameProgress = ((scrollProgress - 0.20f) / 0.15f).coerceIn(0f, 1f)
     val iconProgress = ((scrollProgress - 0.35f) / 0.15f).coerceIn(0f, 1f)
 
@@ -272,6 +276,9 @@ private fun AboutContent(
                         scaleX = 1 - (iconProgress * 0.05f)
                         scaleY = 1 - (iconProgress * 0.05f)
                     }
+                    .clickable {
+                        onIntent(AboutIntent.OpenUrl("https://github.com/hedroid/legado"))
+                    }
                     .background(Color.White),
             ) {
                 Image(
@@ -280,8 +287,10 @@ private fun AboutContent(
                     modifier = Modifier.scale(1.1f)
                 )
             }
-            Text(
+            val appName = stringResource(R.string.app_name)
+            MaterialText(
                 modifier = Modifier
+                    .fillMaxWidth()
                     .padding(top = 12.dp, bottom = 5.dp)
                     .graphicsLayer {
                         alpha = 1 - projectNameProgress
@@ -304,23 +313,24 @@ private fun AboutContent(
                         } else {
                             Modifier
                         },
-                    ),
-                text = stringResource(R.string.app_name),
+                    )
+                    .clickable { onIntent(AboutIntent.CheckUpdate) },
+                text = buildAnnotatedString {
+                    append(appName)
+                    append(" ")
+                    withStyle(
+                        SpanStyle(
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Normal,
+                        )
+                    ) {
+                        append(versionName)
+                    }
+                },
                 color = MiuixTheme.colorScheme.onBackground,
                 fontWeight = FontWeight.Bold,
                 fontSize = 35.sp,
-            )
-            Text(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .graphicsLayer {
-                        alpha = 1 - versionCodeProgress
-                        scaleX = 1 - (versionCodeProgress * 0.05f)
-                        scaleY = 1 - (versionCodeProgress * 0.05f)
-                    },
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                text = versionName,
-                fontSize = 14.sp,
                 textAlign = TextAlign.Center,
             )
         }
@@ -387,15 +397,8 @@ private fun AboutContent(
                         ),
                     ) {
                         ArrowPreference(
-                            title = stringResource(R.string.check_update),
-                            onClick = { onIntent(AboutIntent.CheckUpdate) },
-                        )
-                        ArrowPreference(
-                            title = stringResource(R.string.contributors),
-                            endActions = {
-                                ValueText("GitHub")
-                            },
-                            onClick = { onIntent(AboutIntent.OpenUrl("https://github.com/HapeLee/legado-with-MD3")) },
+                            title = stringResource(R.string.github_project_url),
+                            onClick = { onIntent(AboutIntent.OpenUrl("https://github.com/hedroid/legado")) },
                         )
                     }
 

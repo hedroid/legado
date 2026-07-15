@@ -30,14 +30,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import io.legado.app.R
+import io.legado.app.help.LauncherIconHelp
 import io.legado.app.ui.main.Launcher0
 import io.legado.app.ui.main.Launcher1
 import io.legado.app.ui.main.Launcher2
 import io.legado.app.ui.main.Launcher3
 import io.legado.app.ui.main.Launcher4
-import io.legado.app.ui.main.Launcher5
-import io.legado.app.ui.main.Launcher6
-import io.legado.app.ui.main.LauncherW
+import io.legado.app.ui.main.MainActivity
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.modalBottomSheet.AppModalBottomSheet
 import io.legado.app.ui.widget.components.text.AppText
@@ -54,6 +53,7 @@ fun LauncherIconPickerSheet(
 ) {
     val context = LocalContext.current
     val icons = LauncherIcons.list
+    val normalizedSelectedValue = LauncherIconHelp.normalizeIcon(selectedValue)
 
     AppModalBottomSheet(
         show = show,
@@ -74,7 +74,7 @@ fun LauncherIconPickerSheet(
             ) {
                 items(icons, key = { it.value }) { item ->
 
-                    val isSelected = item.value == selectedValue
+                    val isSelected = item.value == normalizedSelectedValue
                     val drawable = remember(item.resId) {
                         context.getCompatDrawable(item.resId)
                     }
@@ -141,13 +141,7 @@ object LauncherIcons {
             value = "ic_launcher",
             label = "iconMain",
             resId = R.mipmap.ic_launcher,
-            component = ComponentName(appCtx, LauncherW::class.java)
-        ),
-        LauncherIconItem(
-            value = "launcherw",
-            label = "iconWhite",
-            resId = R.mipmap.launcherw,
-            component = ComponentName(appCtx, LauncherW::class.java)
+            component = ComponentName(appCtx, MainActivity::class.java)
         ),
         LauncherIconItem(
             value = "launcher0",
@@ -179,21 +173,9 @@ object LauncherIcons {
             resId = R.mipmap.launcher4,
             component = ComponentName(appCtx, Launcher4::class.java)
         ),
-        LauncherIconItem(
-            value = "launcher5",
-            label = "icon5",
-            resId = R.mipmap.launcher5,
-            component = ComponentName(appCtx, Launcher5::class.java)
-        ),
-        LauncherIconItem(
-            value = "launcher6",
-            label = "icon6",
-            resId = R.mipmap.launcher6,
-            component = ComponentName(appCtx, Launcher6::class.java)
-        ),
     )
 
     fun find(value: String?): LauncherIconItem? {
-        return list.find { it.value == value }
+        return list.find { it.value == LauncherIconHelp.normalizeIcon(value) }
     }
 }
