@@ -4,6 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -26,10 +27,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.legado.app.R
@@ -119,27 +117,27 @@ private fun MaterialAboutScreen(
                     }
             )
             val appName = stringResource(R.string.app_name)
-            Text(
-                text = buildAnnotatedString {
-                    append(appName)
-                    append(" ")
-                    withStyle(
-                        SpanStyle(
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Normal,
-                        )
-                    ) {
-                        append(versionName)
-                    }
-                },
-                style = LegadoTheme.typography.bodyLarge,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .wrapContentWidth(Alignment.CenterHorizontally)
                     .clickable { onIntent(AboutIntent.CheckUpdate) }
-            )
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = appName,
+                    style = LegadoTheme.typography.bodyLarge,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = " $versionName",
+                    style = LegadoTheme.typography.bodyLarge,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Normal,
+                )
+            }
 
             SplicedColumnGroup(
                 modifier = Modifier.padding(horizontal = 16.dp),

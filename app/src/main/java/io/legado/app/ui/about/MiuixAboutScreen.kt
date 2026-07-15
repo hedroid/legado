@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -22,7 +23,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text as MaterialText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.derivedStateOf
@@ -40,11 +40,8 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -288,7 +285,7 @@ private fun AboutContent(
                 )
             }
             val appName = stringResource(R.string.app_name)
-            MaterialText(
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 12.dp, bottom = 5.dp)
@@ -315,24 +312,25 @@ private fun AboutContent(
                         },
                     )
                     .clickable { onIntent(AboutIntent.CheckUpdate) },
-                text = buildAnnotatedString {
-                    append(appName)
-                    append(" ")
-                    withStyle(
-                        SpanStyle(
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Normal,
-                        )
-                    ) {
-                        append(versionName)
-                    }
-                },
-                color = MiuixTheme.colorScheme.onBackground,
-                fontWeight = FontWeight.Bold,
-                fontSize = 35.sp,
-                textAlign = TextAlign.Center,
-            )
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    modifier = Modifier.weight(1f),
+                    text = appName,
+                    color = MiuixTheme.colorScheme.onBackground,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 35.sp,
+                    textAlign = TextAlign.End,
+                )
+                Text(
+                    modifier = Modifier.weight(1f),
+                    text = " $versionName",
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = 14.sp,
+                    textAlign = TextAlign.Start,
+                )
+            }
         }
 
         // Scrollable content

@@ -20,6 +20,24 @@ manifest_branch="update-manifests"
 manifest_dir="$RUNNER_TEMP/$manifest_branch"
 release_tmp="$manifest_dir/release.tmp"
 release_list_tmp="$manifest_dir/releases.tmp"
+github_api_version="2022-11-28"
+
+gh_api_to_file() {
+  local output_file="$1"
+  shift
+
+  for attempt in 1 2 3 4 5; do
+    if gh api \
+      -H "Accept: application/vnd.github+json" \
+      -H "X-GitHub-Api-Version: $github_api_version" \
+      "$@" > "$output_file"; then
+      return 0
+    fi
+    sleep $((attempt * 2))
+  done
+
+  return 1
+}
 
 write_manifest() {
   local source_file="$1"
@@ -70,10 +88,7 @@ else
 fi
 trap 'git worktree remove --force "$manifest_dir" >/dev/null 2>&1 || true' EXIT
 
-gh api \
-  -H "Accept: application/vnd.github+json" \
-  -H "X-GitHub-Api-Version: 2026-03-10" \
-  "repos/$GITHUB_REPOSITORY/releases/tags/$version" > "$release_tmp"
+gh_api_to_file "$release_tmp" "repos/$GITHUB_REPOSITORY/releases/tags/$version"
 write_manifest "$release_tmp" "$channel" "$version"
 
 other_channel="official"
@@ -83,17 +98,11 @@ fi
 
 if [[ ! -f "$manifest_dir/$other_channel.json" ]]; then
   if [[ "$other_channel" == "official" ]]; then
-    gh api \
-      -H "Accept: application/vnd.github+json" \
-      -H "X-GitHub-Api-Version: 2026-03-10" \
-      "repos/$GITHUB_REPOSITORY/releases/latest" > "$release_tmp"
+    gh_api_to_file "$release_tmp" "repos/$GITHUB_REPOSITORY/releases/latest"
     other_version="$(jq -r '.tag_name' "$release_tmp")"
     write_manifest "$release_tmp" "$other_channel" "$other_version"
   else
-    gh api \
-      -H "Accept: application/vnd.github+json" \
-      -H "X-GitHub-Api-Version: 2026-03-10" \
-      "repos/$GITHUB_REPOSITORY/releases?per_page=100" > "$release_list_tmp"
+    gh_api_to_file "$release_list_tmp" "repos/$GITHUB_REPOSITORY/releases?per_page=100"
     if jq -e \
       '[.[] | select(.draft == false and .prerelease == true)] | max_by(.created_at) | select(. != null)' \
       "$release_list_tmp" > "$release_tmp"; then
