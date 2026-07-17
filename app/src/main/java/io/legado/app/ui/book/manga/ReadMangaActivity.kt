@@ -75,8 +75,8 @@ import io.legado.app.ui.book.read.observeEyeProtectionEvents
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.book.toc.TocActivityResult
 import io.legado.app.ui.browser.WebViewActivity
-import io.legado.app.ui.config.readConfig.ReadConfig
 import io.legado.app.ui.config.otherConfig.OtherConfig
+import io.legado.app.ui.config.readConfig.ReadConfig
 import io.legado.app.ui.config.readMangaConfig.ReadMangaConfig
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.widget.number.NumberPickerDialog
@@ -365,11 +365,11 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
             }
 
             override fun nextChapter() {
-                ReadManga.moveToNextChapter()
+                ReadManga.moveToNextChapter(toFirst = true)
             }
 
             override fun prevChapter() {
-                ReadManga.moveToPrevChapter()
+                ReadManga.moveToPrevChapter(toFirst = true)
             }
         }
 
@@ -445,6 +445,7 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
 
     private fun upInfoBar(page: Any?) {
         if (page !is MangaPage) {
+            binding.webtoonFrame.updateAccessibilityState(getString(R.string.loading))
             return
         }
         val chapterIndex = page.chapterIndex
@@ -452,6 +453,13 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
         val chapterPos = page.index
         val imageCount = page.imageCount
         val chapterName = page.mChapterName
+        binding.webtoonFrame.updateAccessibilityState(
+            listOfNotNull(
+                chapterName.takeIf(String::isNotBlank),
+                getString(R.string.a11y_read_progress_page, chapterPos + 1, imageCount),
+                getString(R.string.a11y_read_progress_chapter, chapterIndex + 1, chapterSize),
+            ).joinToString(", ")
+        )
         mMangaFooterConfig.run {
             mLabelBuilder.clear()
             binding.infobar.isGone = hideFooter

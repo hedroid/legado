@@ -80,9 +80,12 @@ data class ReadPreferences(
     val readMenuBgColorNight: Int = 0,
     val readMenuAccentColorNight: Int = 0,
     val readMenuContainerColorNight: Int = 0,
+    val readMenuTextColor: Int = 0,
+    val readMenuTextColorNight: Int = 0,
     val readMenuColorMode: Int = 1,
     val readMenuIconShowText: Boolean = true,
     val readMenuIconStyle: Int = 0,
+    val titleBarIconStyle: Int = 0,
     val readMenuIconItemsPerRow: Int = 5,
     val readMenuIconRowCount: Int = 1,
     val readMenuBottomCornerRadius: Int = 0,
@@ -299,6 +302,12 @@ class ReadSettingsRepository(
     suspend fun setReadMenuContainerColorNight(value: Int) =
         settingsRepository.putInt(PreferKey.readMenuContainerColorNight, value)
 
+    suspend fun setReadMenuTextColor(value: Int) =
+        settingsRepository.putInt(PreferKey.readMenuTextColor, value)
+
+    suspend fun setReadMenuTextColorNight(value: Int) =
+        settingsRepository.putInt(PreferKey.readMenuTextColorNight, value)
+
     suspend fun setReadMenuColorMode(value: Int) =
         settingsRepository.putInt(PreferKey.readMenuColorMode, value.coerceIn(0, 1))
 
@@ -307,6 +316,9 @@ class ReadSettingsRepository(
 
     suspend fun setReadMenuIconStyle(value: Int) =
         settingsRepository.putInt(PreferKey.readMenuIconStyle, value.coerceIn(0, 2))
+
+    suspend fun setTitleBarIconStyle(value: Int) =
+        settingsRepository.putInt(PreferKey.titleBarIconStyle, value.coerceIn(0, 2))
 
     suspend fun setReadMenuIconItemsPerRow(value: Int) =
         settingsRepository.putInt(PreferKey.readMenuIconItemsPerRow, value.coerceIn(2, 8))
@@ -461,9 +473,12 @@ class ReadSettingsRepository(
             readMenuBgColorNight = this[Keys.ReadMenuBgColorNight] ?: 0,
             readMenuAccentColorNight = this[Keys.ReadMenuAccentColorNight] ?: 0,
             readMenuContainerColorNight = this[Keys.ReadMenuContainerColorNight] ?: 0,
+            readMenuTextColor = this[Keys.ReadMenuTextColor] ?: 0,
+            readMenuTextColorNight = this[Keys.ReadMenuTextColorNight] ?: 0,
             readMenuColorMode = this[Keys.ReadMenuColorMode] ?: 1,
             readMenuIconShowText = this[Keys.ReadMenuIconShowText] ?: true,
             readMenuIconStyle = this[Keys.ReadMenuIconStyle] ?: 0,
+            titleBarIconStyle = this[Keys.TitleBarIconStyle] ?: 0,
             readMenuIconItemsPerRow = this[Keys.ReadMenuIconItemsPerRow] ?: 5,
             readMenuIconRowCount = this[Keys.ReadMenuIconRowCount] ?: 1,
             readMenuBottomCornerRadius = this[Keys.ReadMenuBottomCornerRadius] ?: 0,
@@ -562,9 +577,12 @@ class ReadSettingsRepository(
         val ReadMenuBgColorNight = intPreferencesKey(PreferKey.readMenuBgColorNight)
         val ReadMenuAccentColorNight = intPreferencesKey(PreferKey.readMenuAccentColorNight)
         val ReadMenuContainerColorNight = intPreferencesKey(PreferKey.readMenuContainerColorNight)
+        val ReadMenuTextColor = intPreferencesKey(PreferKey.readMenuTextColor)
+        val ReadMenuTextColorNight = intPreferencesKey(PreferKey.readMenuTextColorNight)
         val ReadMenuColorMode = intPreferencesKey(PreferKey.readMenuColorMode)
         val ReadMenuIconShowText = booleanPreferencesKey(PreferKey.readMenuIconShowText)
         val ReadMenuIconStyle = intPreferencesKey(PreferKey.readMenuIconStyle)
+        val TitleBarIconStyle = intPreferencesKey(PreferKey.titleBarIconStyle)
         val ReadMenuIconItemsPerRow = intPreferencesKey(PreferKey.readMenuIconItemsPerRow)
         val ReadMenuIconRowCount = intPreferencesKey(PreferKey.readMenuIconRowCount)
         val ReadMenuBottomCornerRadius = intPreferencesKey(PreferKey.readMenuBottomCornerRadius)

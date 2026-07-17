@@ -75,6 +75,7 @@ import io.legado.app.model.ImageProvider
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
 import io.legado.app.model.SourceCallBack
+import io.legado.app.model.activeReadAloudProgress
 import io.legado.app.model.analyzeRule.AnalyzeRule
 import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setChapter
 import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
@@ -179,6 +180,14 @@ class ReadBookViewModel(
 
     private val _effects = MutableSharedFlow<ReadBookEffect>(extraBufferCapacity = 16)
     val effects = _effects.asSharedFlow()
+
+    private val _readAloudProgress = MutableStateFlow(
+        activeReadAloudProgress(
+            isPlaying = BaseReadAloudService.isPlay(),
+            currentProgress = BaseReadAloudService.currentProgress,
+        )
+    )
+    val readAloudProgress = _readAloudProgress.asStateFlow()
 
     private suspend fun emitEffectWhenSubscribed(effect: ReadBookEffect) {
         _effects.subscriptionCount.first { it > 0 }
@@ -582,6 +591,7 @@ class ReadBookViewModel(
                 }
             }
             is ReadBookIntent.OpenChapterUrl -> openChapterUrl()
+            is ReadBookIntent.SourceCustomButton -> runSourceCustomButton(intent.longClick)
             is ReadBookIntent.ToggleReadUrlInBrowser -> toggleReadUrlInBrowser()
             is ReadBookIntent.OpenContentEdit -> openContentEdit()
             is ReadBookIntent.LoadContentEdit -> loadContentEdit()
@@ -868,7 +878,7 @@ class ReadBookViewModel(
                 }
             }
 
-            is ReadBookIntent.TtsProgress -> _effects.tryEmit(ReadBookEffect.UpTtsAloudSpan(intent.chapterStart))
+            is ReadBookIntent.TtsProgress -> updateReadAloudProgress(intent.chapterStart)
             is ReadBookIntent.ReadAloudAction -> {
                 openReadMenuRoute(ReadBookMenuRoute.ReadAloud)
             }
@@ -1826,6 +1836,7 @@ class ReadBookViewModel(
                         9 -> ConfigUpdateAction.InvalidateTextPage
                         10 -> ConfigUpdateAction.UpdateLayout
                         11 -> ConfigUpdateAction.SubmitRenderTask
+                        12 -> ConfigUpdateAction.RelayoutContent
                         else -> null
                     }
                 }.toSet()
@@ -1843,6 +1854,7 @@ class ReadBookViewModel(
                     )
                 }
                 if (state == Status.STOP || state == Status.PAUSE) {
+                    _readAloudProgress.value = null
                     _effects.tryEmit(ReadBookEffect.UpAloudState)
                 }
                 if (state == Status.PAUSE) {
@@ -1885,8 +1897,14 @@ class ReadBookViewModel(
         }
         viewModelScope.launch {
             eventFlowSticky<Int>(EventBus.TTS_PROGRESS).collect { chapterStart ->
-                _effects.tryEmit(ReadBookEffect.UpTtsAloudSpan(chapterStart))
+                updateReadAloudProgress(chapterStart)
             }
+        }
+    }
+
+    private fun updateReadAloudProgress(chapterStart: Int) {
+        if (BaseReadAloudService.isPlay() && chapterStart > 0) {
+            _readAloudProgress.value = chapterStart
         }
     }
 
@@ -2051,6 +2069,8 @@ class ReadBookViewModel(
                 readMenuBorderWidth = ReadBookConfig.readMenuBorderWidth,
                 readMenuBorderColor = ReadBookConfig.readMenuBorderColor,
                 readMenuBorderColorNight = ReadBookConfig.readMenuBorderColorNight,
+                readMenuTextColor = ReadBookConfig.readMenuTextColor,
+                readMenuTextColorNight = ReadBookConfig.readMenuTextColorNight,
                 readMenuBlurAlpha = ReadBookConfig.readMenuBlurAlpha,
                 readMenuBlurColor = ReadBookConfig.readMenuBlurColor,
                 readMenuBlurColorNight = ReadBookConfig.readMenuBlurColorNight,
@@ -2065,6 +2085,7 @@ class ReadBookViewModel(
                 readMenuTopBarBlurStyle = ReadBookConfig.readMenuTopBarBlurStyle,
                 readMenuBottomBarBlurStyle = ReadBookConfig.readMenuBottomBarBlurStyle,
                 readMenuIconStyle = ReadBookConfig.readMenuIconStyle,
+                titleBarIconStyle = ReadBookConfig.titleBarIconStyle,
                 readMenuIconShowText = ReadBookConfig.readMenuIconShowText,
                 readSliderMode = ReadBookConfig.readSliderMode,
                 titleBarCustomIcons = ReadBookConfig.titleBarCustomIcons.toImmutableMap(),
@@ -4534,6 +4555,24 @@ class ReadBookViewModel(
                 }
                 postEvent(EventBus.UPDATE_READ_ACTION_BAR, true)
             }
+            is ConfigUpdate.MenuTextColor -> {
+                ReadBookConfig.readMenuTextColor = update.color
+                viewModelScope.launch {
+                    readSettingsRepository.setReadMenuTextColor(update.color)
+                }
+                _uiState.update {
+                    it.copy(menuConfig = it.menuConfig.copy(readMenuTextColor = update.color))
+                }
+            }
+            is ConfigUpdate.MenuTextColorNight -> {
+                ReadBookConfig.readMenuTextColorNight = update.color
+                viewModelScope.launch {
+                    readSettingsRepository.setReadMenuTextColorNight(update.color)
+                }
+                _uiState.update {
+                    it.copy(menuConfig = it.menuConfig.copy(readMenuTextColorNight = update.color))
+                }
+            }
             is ConfigUpdate.MenuColorMode -> {
                 val value = update.value.coerceIn(0, 1)
                 ReadBookConfig.readMenuColorMode = value
@@ -4635,6 +4674,14 @@ class ReadBookViewModel(
                     readSettingsRepository.setReadMenuIconStyle(value)
                 }
                 _uiState.update { it.copy(menuConfig = it.menuConfig.copy(readMenuIconStyle = value)) }
+            }
+            is ConfigUpdate.TitleBarIconStyle -> {
+                val value = update.value.coerceIn(0, 2)
+                ReadBookConfig.titleBarIconStyle = value
+                viewModelScope.launch {
+                    readSettingsRepository.setTitleBarIconStyle(value)
+                }
+                _uiState.update { it.copy(menuConfig = it.menuConfig.copy(titleBarIconStyle = value)) }
             }
             is ConfigUpdate.MenuIconItemsPerRow -> {
                 val value = update.value.coerceIn(2, 8)
@@ -5734,6 +5781,24 @@ class ReadBookViewModel(
                 )
             }
         }
+    }
+
+    private fun runSourceCustomButton(longClick: Boolean) {
+        val source = ReadBook.bookSource?.takeIf { it.customButton } ?: return
+        val book = ReadBook.book ?: return
+        val chapter = appDb.bookChapterDao.getChapter(book.bookUrl, ReadBook.durChapterIndex)
+        _effects.tryEmit(
+            ReadBookEffect.RunSourceCustomButton(
+                event = if (longClick) {
+                    SourceCallBack.LONG_CLICK_CUSTOM_BUTTON
+                } else {
+                    SourceCallBack.CLICK_CUSTOM_BUTTON
+                },
+                source = source,
+                book = book,
+                chapter = chapter,
+            )
+        )
     }
 
     private fun toggleReadUrlInBrowser() {
