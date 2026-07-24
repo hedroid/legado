@@ -61,11 +61,11 @@ import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BrightnessAuto
 import androidx.compose.material.icons.filled.BugReport
-import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CleanHands
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.FindReplace
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Menu
@@ -261,6 +261,7 @@ fun ReadBookMenuBar(
                 if (state.menuConfig.showTitleBarIcons && state.menuConfig.titleBarIconPosition <= 1) {
                     FloatingIconRow(
                         state = state,
+                        preferences = preferences,
                         colors = menuColors,
                         alignment = if (state.menuConfig.titleBarIconPosition == 0) {
                             Alignment.Start
@@ -375,6 +376,7 @@ fun ReadBookMenuBar(
                 ) {
                     FloatingIconRow(
                         state = state,
+                        preferences = preferences,
                         colors = menuColors,
                         alignment = if (state.menuConfig.titleBarIconPosition == 2) {
                             Alignment.Start
@@ -670,6 +672,7 @@ private fun ReadBookMenuSurface(
                     ReadBookMenuRoute.Main -> {
                     MenuBottomBar(
                         state = state,
+                        eyeProtectionEnabled = preferences.eyeProtectionEnabled,
                         colors = colors,
                         onIntent = onIntent,
                         context = context,
@@ -733,6 +736,7 @@ private fun ReadBookMenuSurface(
                             onBack = { onIntent(ReadBookIntent.ReadMenuBack) },
                         ) {
                             PaddingConfigContent(
+                                config = state.sheetConfig,
                                 onIntent = onIntent,
                                 modifier = Modifier.padding(horizontal = 16.dp),
                             )
@@ -763,6 +767,7 @@ private fun ReadBookMenuSurface(
                             onBack = { onIntent(ReadBookIntent.ReadMenuBack) },
                         ) {
                             ReadStyleTextTitleContent(
+                                config = state.sheetConfig,
                                 onOpenShadowSet = {
                                     onIntent(ReadBookIntent.ShowSheet(ReadBookSheet.ShadowSet))
                                 },
@@ -808,7 +813,7 @@ private fun ReadBookMenuSurface(
                                 onShowReadAloudConfig = {
                                     onIntent(ReadBookIntent.ShowReadAloudConfig)
                                 },
-                                modifier = Modifier.padding(horizontal = 16.dp),
+                                modifier = Modifier.padding(horizontal = 16.dp)
                             )
                         }
                     }
@@ -998,7 +1003,6 @@ private fun MenuTitleBar(
             )
     ) {
         val useTitleCapsule = readMenuTopBarTitleCapsuleEnabled(backdrop, state.menuConfig)
-                && topBarVisualState.isProgressiveBlur
         val capsuleIconColor = LegadoTheme.colorScheme.onSurfaceVariant
 
         // Title row: left group (back + capsule/title) + right group (actions)
@@ -1023,7 +1027,7 @@ private fun MenuTitleBar(
                     backdrop = backdrop,
                 )
 
-                if (useTitleCapsule) {
+                if (useTitleCapsule && titleBarMode != "1" && titleBarMode != "3") {
                     TitleCapsuleGlassLayout(
                         state = state,
                         colors = colors,
@@ -1061,12 +1065,13 @@ private fun MenuTitleBar(
                     backdrop = backdrop,
                 )
             } else {
+                val compact = state.menuConfig.titleBarCompact
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (!state.isLocalBook) {
-                        if (state.bookSource?.customButton == true) {
+                        if (!compact && state.bookSource?.customButton == true) {
                             SourceCustomActionButton(
                                 state = state,
                                 colors = colors,
@@ -1074,25 +1079,27 @@ private fun MenuTitleBar(
                                 backdrop = backdrop,
                             )
                         }
-                        SourceActionButton(
-                            state = state,
-                            colors = colors,
-                            onIntent = onIntent,
-                            backdrop = backdrop,
-                        )
-                        RefreshActionButton(
-                            state = state,
-                            colors = colors,
-                            onIntent = onIntent,
-                            backdrop = backdrop,
-                        )
-                        DownloadActionButton(
-                            state = state,
-                            colors = colors,
-                            onIntent = onIntent,
-                            backdrop = backdrop,
-                        )
-                    } else {
+                        if (!compact) {
+                            SourceActionButton(
+                                state = state,
+                                colors = colors,
+                                onIntent = onIntent,
+                                backdrop = backdrop,
+                            )
+                            RefreshActionButton(
+                                state = state,
+                                colors = colors,
+                                onIntent = onIntent,
+                                backdrop = backdrop,
+                            )
+                            DownloadActionButton(
+                                state = state,
+                                colors = colors,
+                                onIntent = onIntent,
+                                backdrop = backdrop,
+                            )
+                        }
+                    } else if (state.isLocalBook && !compact) {
                         if (state.isLocalTxt) {
                             TxtTocRuleActionButton(
                                 state = state,
@@ -1398,20 +1405,44 @@ private fun RowScope.TitleCapsuleGlassLayout(
     titleTextColor: Color,
 ) {
     val pillShape = RoundedCornerShape(50)
+    val glassEnabled = readerMenuLiquidGlassAvailable(backdrop)
+            && state.menuConfig.readMenuTopBarLiquidGlassButtons
+    val iconStyle = state.menuConfig.titleBarIconStyle
 
     Row(
         modifier = Modifier
             .weight(1f)
             .padding(start = 12.dp)
             .height(40.dp)
-            .readMenuLiquidGlass(
-                backdrop = backdrop,
-                colors = colors,
-                shape = pillShape,
-                useTopBarStyle = true,
-                useLens = false,
-                blurRadius = 32.dp,
-                menuConfig = state.menuConfig,
+            .then(
+                if (glassEnabled) {
+                    Modifier.readMenuLiquidGlass(
+                        backdrop = backdrop,
+                        colors = colors,
+                        shape = pillShape,
+                        useTopBarStyle = true,
+                        useLens = false,
+                        blurRadius = 32.dp,
+                        menuConfig = state.menuConfig,
+                    )
+                } else {
+                    val containerColor = when (iconStyle) {
+                        1 -> LegadoTheme.colorScheme.surfaceContainerLow
+                        else -> Color.Transparent
+                    }
+                    val border = when (iconStyle) {
+                        2 -> BorderStroke(
+                            1.dp,
+                            LegadoTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                        )
+
+                        else -> null
+                    }
+                    Modifier
+                        .clip(pillShape)
+                        .background(containerColor, pillShape)
+                        .then(if (border != null) Modifier.border(border, pillShape) else Modifier)
+                }
             )
             .then(
                 if (!state.isLocalBook) {
@@ -1468,6 +1499,7 @@ private fun MenuTitleBarMergedGlassButton(
 
     val pillShape = RoundedCornerShape(50)
     val tint = LegadoTheme.colorScheme.onSurfaceVariant
+    val compact = state.menuConfig.titleBarCompact
 
     Box {
         Row(
@@ -1482,12 +1514,11 @@ private fun MenuTitleBarMergedGlassButton(
                     blurRadius = 32.dp,
                     interactive = true,
                     menuConfig = state.menuConfig,
-                )
-                .padding(horizontal = 4.dp),
+                ),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
             // SwapHoriz - change source
-            if (!state.isLocalBook) {
+            if (!state.isLocalBook && !compact) {
                 if (state.bookSource?.customButton == true) {
                     val customButtonDescription = stringResource(R.string.custom_button)
                     Box(
@@ -1507,7 +1538,7 @@ private fun MenuTitleBarMergedGlassButton(
                             },
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Build,
+                            imageVector = Icons.Default.Extension,
                             contentDescription = null,
                             tint = tint,
                             modifier = Modifier.size(20.dp),
@@ -1622,7 +1653,7 @@ private fun MenuTitleBarMergedGlassButton(
                         .background(tint.copy(alpha = 0.15f))
                         .clearAndSetSemantics { }
                 )
-            } else {
+            } else if (state.isLocalBook && !compact) {
                 // TXT directory rule
                 if (state.isLocalTxt) {
                     val tocRuleDescription = stringResource(R.string.txt_toc_rule)
@@ -1768,7 +1799,7 @@ private fun SourceCustomActionButton(
     MenuTitleGlassButton(
         onClick = { onIntent(ReadBookIntent.SourceCustomButton(false)) },
         onLongClick = { onIntent(ReadBookIntent.SourceCustomButton(true)) },
-        icon = Icons.Default.Build,
+        icon = Icons.Default.Extension,
         contentDescription = stringResource(R.string.custom_button),
         state = state,
         colors = colors,
@@ -1902,23 +1933,30 @@ private fun CharsetActionButton(
 @Composable
 private fun FloatingIconRow(
     state: ReadBookUiState,
+    preferences: ReadPreferences,
     colors: ReadMenuColors,
     alignment: Alignment.Horizontal = Alignment.CenterHorizontally,
     onIntent: (ReadBookIntent) -> Unit,
     backdrop: Backdrop?,
 ) {
     val context = LocalContext.current
-    val titleBarIcons = remember(
+    val floatingIcons = remember(
         state.menuConfig.titleBarButtons,
         state.isReadAloudRunning,
         state.isAutoPage,
         state.translationMode,
         state.useReplaceRule,
+        preferences.eyeProtectionEnabled,
     ) {
-        loadFloatingIcons(context, state, onIntent)
+        loadFloatingIcons(
+            context = context,
+            state = state,
+            preferences = preferences,
+            onIntent = onIntent,
+        )
     }
 
-    if (titleBarIcons.isEmpty()) return
+    if (floatingIcons.isEmpty()) return
 
     Row(
         modifier = Modifier
@@ -1932,21 +1970,20 @@ private fun FloatingIconRow(
         },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        titleBarIcons.forEach { iconDef ->
+        floatingIcons.forEach { iconDef ->
             val customPath = remember(state.menuConfig.titleBarCustomIcons, iconDef.id) {
                 state.menuConfig.titleBarCustomIcons[iconDef.id]
             }
             val isCustom = !customPath.isNullOrBlank()
+            val glassEnabled = !isCustom && state.menuConfig.readMenuFloatingIconLiquidGlass &&
+                    readerMenuLiquidGlassAvailable(backdrop)
             ReadMenuGlassButtonSurface(
                 onClick = iconDef.onClick,
                 colors = colors,
                 backdrop = backdrop,
                 menuConfig = state.menuConfig,
-                glassEnabled = !isCustom && readMenuTopBarButtonLiquidGlassEnabled(
-                    backdrop,
-                    state.menuConfig
-                ),
-                iconStyle = state.menuConfig.titleBarIconStyle,
+                glassEnabled = glassEnabled,
+                iconStyle = 1,
                 selected = iconDef.isActive,
                 modifier = Modifier.padding(horizontal = 4.dp),
                 onLongClick = iconDef.onLongClick,
@@ -1995,6 +2032,41 @@ private fun OverflowDropdownMenu(
         onDismissRequest = onDismiss,
     ) { dismiss ->
         var imageStyleExpanded by remember { mutableStateOf(false) }
+
+        // Compact mode: moved from top bar buttons
+        if (state.menuConfig.titleBarCompact) {
+            if (!state.isLocalBook) {
+                RoundDropdownMenuItem(
+                    text = stringResource(R.string.change_origin),
+                    leadingIcon = menuIcon(Icons.Default.SwapHoriz),
+                    onClick = { dismiss(); onIntent(ReadBookIntent.MenuChangeSource) },
+                )
+                RoundDropdownMenuItem(
+                    text = stringResource(R.string.menu_refresh_after),
+                    leadingIcon = menuIcon(Icons.Default.Refresh),
+                    onClick = { dismiss(); onIntent(ReadBookIntent.MenuRefreshAfter) },
+                )
+                RoundDropdownMenuItem(
+                    text = stringResource(R.string.offline_cache),
+                    leadingIcon = menuIcon(Icons.Default.CloudDownload),
+                    onClick = { dismiss(); onIntent(ReadBookIntent.ShowSheet(ReadBookSheet.Download)) },
+                )
+            } else {
+                if (state.isLocalTxt) {
+                    RoundDropdownMenuItem(
+                        text = stringResource(R.string.txt_toc_rule),
+                        leadingIcon = menuIcon(Icons.Default.Toc),
+                        onClick = { dismiss(); onIntent(ReadBookIntent.MenuTocRegex) },
+                    )
+                }
+                RoundDropdownMenuItem(
+                    text = stringResource(R.string.set_charset),
+                    leadingIcon = menuIcon(Icons.Default.Translate),
+                    onClick = { dismiss(); onIntent(ReadBookIntent.ShowSheet(ReadBookSheet.Charset)) },
+                )
+            }
+            PillDivider()
+        }
 
         // Source actions
         if (!state.isLocalBook) {
@@ -2152,7 +2224,7 @@ private fun OverflowDropdownMenu(
         )
         RoundDropdownMenuItem(
             text = stringResource(R.string.config_btn),
-            leadingIcon = menuIcon(Icons.Default.Build),
+            leadingIcon = menuIcon(Icons.Default.Extension),
             onClick = {
                 dismiss()
                 onIntent(ReadBookIntent.ShowSheet(ReadBookSheet.ToolButtonConfig))
@@ -2340,6 +2412,7 @@ private fun SearchMenuActionButton(
 @Composable
 private fun MenuBottomBar(
     state: ReadBookUiState,
+    eyeProtectionEnabled: Boolean,
     colors: ReadMenuColors,
     onIntent: (ReadBookIntent) -> Unit,
     context: Context,
@@ -2500,8 +2573,14 @@ private fun MenuBottomBar(
             state.isAutoPage,
             state.translationMode,
             state.useReplaceRule,
+            eyeProtectionEnabled,
         ) {
-            loadToolButtons(context, state, onIntent)
+            loadToolButtons(
+                context = context,
+                state = state,
+                eyeProtectionEnabled = eyeProtectionEnabled,
+                onIntent = onIntent,
+            )
         }
         val itemsPerRow = state.menuConfig.readMenuIconItemsPerRow
         val rowCount = state.menuConfig.readMenuIconRowCount
@@ -2984,6 +3063,7 @@ private data class ToolButtonDef(
 private fun loadToolButtons(
     context: Context,
     state: ReadBookUiState,
+    eyeProtectionEnabled: Boolean,
     onIntent: (ReadBookIntent) -> Unit,
 ): List<ToolButtonDef> {
     val customIcons = state.menuConfig.readMenuCustomIcons
@@ -3009,7 +3089,7 @@ private fun loadToolButtons(
             },
         ) {
             if (state.isReadAloudRunning) {
-                onIntent(ReadBookIntent.OpenReadMenuRoute(ReadBookMenuRoute.ReadAloud))
+                onIntent(ReadBookIntent.ReadAloudAction)
             } else {
                 onIntent(ReadBookIntent.ToggleReadAloud)
                 onIntent(ReadBookIntent.HideMenu)
@@ -3023,6 +3103,12 @@ private fun loadToolButtons(
         },
         infoMap.getValue("theme").toButton {
             onIntent(ReadBookIntent.ToggleDayNight)
+        },
+        infoMap.getValue("eye_protection").toButton(
+            isActive = eyeProtectionEnabled,
+            onLongClick = { onIntent(ReadBookIntent.ShowSheet(ReadBookSheet.EyeProtection)) },
+        ) {
+            onIntent(ReadBookIntent.ToggleEyeProtection)
         },
         infoMap.getValue("prev_chapter").toButton {
             onIntent(ReadBookIntent.PrevChapter)
@@ -3083,8 +3169,7 @@ private fun readMenuTopBarButtonLiquidGlassEnabled(
     backdrop: Backdrop?,
     menuConfig: ReadMenuConfig,
 ): Boolean {
-    return menuConfig.readMenuTopBarBlurMode != ReadMenuBlurMode.None &&
-            menuConfig.readMenuTopBarLiquidGlassButtons &&
+    return menuConfig.readMenuTopBarLiquidGlassButtons &&
             readerMenuLiquidGlassAvailable(backdrop)
 }
 
@@ -3092,9 +3177,7 @@ private fun readMenuTopBarTitleCapsuleEnabled(
     backdrop: Backdrop?,
     menuConfig: ReadMenuConfig,
 ): Boolean {
-    return menuConfig.readMenuTopBarBlurMode != ReadMenuBlurMode.None &&
-            menuConfig.readMenuTopBarTitleCapsule &&
-            readerMenuLiquidGlassAvailable(backdrop)
+    return menuConfig.readMenuTopBarTitleCapsule
 }
 
 private fun readMenuBottomBarButtonLiquidGlassEnabled(
@@ -3246,7 +3329,7 @@ private fun readMenuColors(readBarStyle: Int): ReadMenuColors {
 
 // ========== Title Bar Icons ==========
 
-private data class TitleBarIconDef(
+private data class FloatingIconDef(
     val id: String,
     val icon: ImageVector,
     val label: String,
@@ -3258,8 +3341,9 @@ private data class TitleBarIconDef(
 private fun loadFloatingIcons(
     context: Context,
     state: ReadBookUiState,
+    preferences: ReadPreferences,
     onIntent: (ReadBookIntent) -> Unit,
-): List<TitleBarIconDef> {
+): List<FloatingIconDef> {
     val infoMap = readMenuButtonInfos(context).associateBy { it.id }
 
     val actionMap: Map<String, () -> Unit> = mapOf(
@@ -3267,7 +3351,7 @@ private fun loadFloatingIcons(
         "catalog" to { onIntent(ReadBookIntent.OpenChapterList) },
         "read_aloud" to {
             if (state.isReadAloudRunning) {
-                onIntent(ReadBookIntent.OpenReadMenuRoute(ReadBookMenuRoute.ReadAloud))
+                onIntent(ReadBookIntent.ReadAloudAction)
             } else {
                 onIntent(ReadBookIntent.ToggleReadAloud)
                 onIntent(ReadBookIntent.HideMenu)
@@ -3276,6 +3360,7 @@ private fun loadFloatingIcons(
         "setting" to { onIntent(ReadBookIntent.OpenReadMenuRoute(ReadBookMenuRoute.ReadStyle)) },
         "addBookmark" to { onIntent(ReadBookIntent.AddBookmark) },
         "theme" to { onIntent(ReadBookIntent.ToggleDayNight) },
+        "eye_protection" to { onIntent(ReadBookIntent.ToggleEyeProtection) },
         "prev_chapter" to { onIntent(ReadBookIntent.PrevChapter) },
         "next_chapter" to { onIntent(ReadBookIntent.NextChapter) },
         "replace" to { onIntent(ReadBookIntent.MenuEnableReplace) },
@@ -3298,6 +3383,7 @@ private fun loadFloatingIcons(
         if (state.isAutoPage) add("auto_page")
         if (state.translationMode) add("translate")
         if (state.useReplaceRule) add("replace")
+        if (preferences.eyeProtectionEnabled) add("eye_protection")
     }
 
     return state.menuConfig.titleBarButtons
@@ -3306,7 +3392,7 @@ private fun loadFloatingIcons(
         .mapNotNull { item ->
             val id = item.id
             val info = infoMap[id] ?: return@mapNotNull null
-            TitleBarIconDef(
+            FloatingIconDef(
                 id = id,
                 icon = info.icon,
                 label = info.label,

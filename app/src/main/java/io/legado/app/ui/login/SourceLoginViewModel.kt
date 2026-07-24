@@ -11,6 +11,7 @@ import io.legado.app.data.entities.BaseSource
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.exception.NoStackTraceException
+import io.legado.app.help.config.AppConfig
 import io.legado.app.model.AudioPlay
 import io.legado.app.model.ReadBook
 import io.legado.app.utils.toastOnUi
@@ -59,7 +60,7 @@ class SourceLoginViewModel(application: Application) : BaseViewModel(application
                 }
             }
             headerMap = runScriptWithContext {
-                source?.getHeaderMap(true) ?: emptyMap()
+                source?.getHeaderMap(AppConfig.userAgent, true) ?: emptyMap()
             }
             source?.let { loginInfo = it.getLoginInfoMap() }
             source
