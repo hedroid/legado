@@ -1,5 +1,8 @@
 package io.legado.app.ui.config.readConfig
 
+import androidx.compose.runtime.Stable
+
+@Stable
 data class ReadConfigUiState(
     val screenOrientation: String = "0",
     val keepLight: String = "0",
@@ -7,16 +10,19 @@ data class ReadConfigUiState(
     val hideNavigationBar: Boolean = false,
     val paddingDisplayCutouts: Boolean = false,
     val titleBarMode: String = "1",
-    val readMenuBlurAlpha: Int = 60,
+    val readMenuBlurAlpha: Int = 100,
     val readBodyToLh: Boolean = true,
     val defaultSourceChangeAll: Boolean = true,
     val textFullJustify: Boolean = true,
     val textBottomJustify: Boolean = true,
     val adaptSpecialStyle: Boolean = true,
     val useZhLayout: Boolean = false,
-    val showBrightnessView: String = "1",
+    val eyeProtectionEnabled: Boolean = false,
+    val eyeProtectionIntensity: Int = 50,
+    val eyeProtectionAutoNight: Boolean = false,
+    val showBrightnessView: String = "0",
     val brightnessVwPos: String = "1",
-    val brightnessAuto: Boolean = false,
+    val brightnessAuto: Boolean = true,
     val useUnderline: Boolean = false,
     val readSliderMode: String = "0",
     val doubleHorizontalPage: String = "0",
@@ -41,10 +47,20 @@ data class ReadConfigUiState(
     val autoReadSpeed: Int = 10,
     val prevKeys: String = "",
     val nextKeys: String = "",
-    val showMenuIcon: Boolean = true
+    val showMenuIcon: Boolean = false,
+    val activeSheet: ReadConfigSheet? = null,
 )
 
+sealed interface ReadConfigSheet {
+    data object PageKeys : ReadConfigSheet
+    data object ClickActions : ReadConfigSheet
+    data object EyeProtection : ReadConfigSheet
+}
+
 sealed interface ReadConfigIntent {
+    data object OpenPageKeys : ReadConfigIntent
+    data object OpenClickActions : ReadConfigIntent
+    data object DismissSheet : ReadConfigIntent
     data class ScreenOrientationChanged(val value: String) : ReadConfigIntent
     data class KeepLightChanged(val value: String) : ReadConfigIntent
     data class HideStatusBarChanged(val value: Boolean) : ReadConfigIntent
@@ -58,6 +74,10 @@ sealed interface ReadConfigIntent {
     data class TextBottomJustifyChanged(val value: Boolean) : ReadConfigIntent
     data class AdaptSpecialStyleChanged(val value: Boolean) : ReadConfigIntent
     data class UseZhLayoutChanged(val value: Boolean) : ReadConfigIntent
+    data object OpenEyeProtection : ReadConfigIntent
+    data class EyeProtectionEnabledChanged(val value: Boolean) : ReadConfigIntent
+    data class EyeProtectionIntensityChanged(val value: Int) : ReadConfigIntent
+    data class EyeProtectionAutoNightChanged(val value: Boolean) : ReadConfigIntent
     data class ShowBrightnessViewChanged(val value: String) : ReadConfigIntent
     data class BrightnessVwPosChanged(val value: String) : ReadConfigIntent
     data class UseUnderlineChanged(val value: Boolean) : ReadConfigIntent
@@ -81,4 +101,8 @@ sealed interface ReadConfigIntent {
     data class ShowMenuIconChanged(val value: Boolean) : ReadConfigIntent
     data class AutoSuggestDayNightChanged(val value: Boolean) : ReadConfigIntent
     data class PageKeysChanged(val prevKeys: String, val nextKeys: String) : ReadConfigIntent
+}
+
+sealed interface ReadConfigEffect {
+    data class SettingsUpdateFailed(val message: String) : ReadConfigEffect
 }

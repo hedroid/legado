@@ -13,9 +13,16 @@ import android.widget.ImageView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -54,6 +61,7 @@ import io.legado.app.ui.browser.WebViewActivity
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.replace.ReplaceEditRoute
 import io.legado.app.ui.replace.ReplaceRuleActivity
+import io.legado.app.ui.theme.LocalAppUiConfiguration
 import io.legado.app.utils.StartActivityContract
 import io.legado.app.utils.takePersistablePermissionSafely
 import io.legado.app.utils.toastOnUi
@@ -117,12 +125,16 @@ fun ReadBookRouteScreen(
     controller: ReadBookController,
     onEffectsReady: () -> Unit = {},
     onOpenSearch: (word: String?, bookUrl: String) -> Unit = { _, _ -> },
+    onOpenVoiceCasting: (bookUrl: String) -> Unit = {},
+    onOpenTtsEnginesAndVoices: () -> Unit = {},
+    onOpenTtsCache: () -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val readPreferences by viewModel.readPreferences.collectAsStateWithLifecycle()
     val textMenuState by controller.textMenuState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val isDarkTheme = LocalAppUiConfiguration.current.isDarkTheme
     val effectsReady = remember(viewModel) { CompletableDeferred<Unit>() }
     val menuBackdrop = rememberLayerBackdrop()
     val menuHazeState = remember { HazeState() }
@@ -133,8 +145,18 @@ fun ReadBookRouteScreen(
                             state.menuConfig.readMenuBottomBarBlurMode == ReadMenuBlurMode.LiquidGlass
                     )
 
+    DisposableEffect(controller) {
+        onDispose {
+            controller.clearAppThemeOverride()
+        }
+    }
+
     LaunchedEffect(state.menuVisible) {
         controller.onMenuVisibilityChanged(state.menuVisible)
+    }
+
+    LaunchedEffect(isDarkTheme, readPreferences.eyeProtectionAutoNight) {
+        viewModel.onIntent(ReadBookIntent.SyncEyeProtectionForTheme(isDarkTheme))
     }
 
     LaunchedEffect(viewModel, controller, lifecycleOwner) {
@@ -350,6 +372,11 @@ fun ReadBookRouteScreen(
                             is ReadBookEffect.OpenSearchActivity -> {
                                 onOpenSearch(effect.word, effect.bookUrl)
                             }
+                            is ReadBookEffect.OpenBookVoiceCasting -> {
+                                onOpenVoiceCasting(effect.bookUrl)
+                            }
+                            ReadBookEffect.OpenTtsEnginesAndVoices -> onOpenTtsEnginesAndVoices()
+                            ReadBookEffect.OpenTtsCache -> onOpenTtsCache()
                             is ReadBookEffect.MenuSettingReplace -> {
                                 replaceLauncher.launch(Intent(context, ReplaceRuleActivity::class.java))
                             }
@@ -397,7 +424,7 @@ fun ReadBookRouteScreen(
                                 )
                             }
                             is ReadBookEffect.OpenReadStyleExport -> {
-                                readStyleExportPicker.launch("readConfig.zip")
+                                readStyleExportPicker.launch(effect.fileName)
                             }
                             is ReadBookEffect.OpenMenuCustomIconPicker -> {
                                 pendingMenuCustomIconId = effect.id
@@ -495,7 +522,9 @@ fun ReadBookRouteScreen(
 
     var showSelectMenuConfigSheet by rememberSaveable { mutableStateOf(false) }
 
-    Box(Modifier.fillMaxSize()) {
+    Box(
+        Modifier.fillMaxSize()
+    ) {
         key(controller) {
             ReadBookViewLayer(
                 modifier = Modifier
@@ -505,11 +534,14 @@ fun ReadBookRouteScreen(
                 onCursorTouch = controller,
                 readViewCallBack = controller,
                 contentTextViewCallBack = controller,
+                isDarkTheme = isDarkTheme,
+                onThemeChanged = controller::onAppThemeChanged,
             )
         }
         ReadBookColorTheme(
             styleConfig = state.styleConfig,
             preferences = readPreferences,
+            isDarkTheme = isDarkTheme,
         ) {
             ReadBookMenuBar(
                 state = state,
@@ -520,6 +552,31 @@ fun ReadBookRouteScreen(
                 hazeState = if (useMenuHazeSource) menuHazeState else null,
             )
             ReadBookSearchBar(state = state, onIntent = viewModel::onIntent)
+            AnimatedVisibility(
+                visible = state.isReadAloudRunning &&
+                    state.showReadAloudCapsule &&
+                        !state.menuVisible,
+                enter = fadeIn(tween(180)) + scaleIn(tween(220), initialScale = 0.88f),
+                exit = fadeOut(tween(140)) + scaleOut(tween(180), targetScale = 0.88f),
+            ) {
+                ReadAloudCapsule(
+                    book = state.book,
+                    isPaused = state.isReadAloudPaused,
+                    offsetXDp = state.readAloudCapsuleOffsetX,
+                    offsetYDp = state.readAloudCapsuleOffsetY,
+                    progress = state.readAloudChapterPosition.toFloat() /
+                        state.readAloudChapterLength.coerceAtLeast(1),
+                    autoCollapse = state.capsuleAutoCollapse,
+                    onPositionChanged = { x, y ->
+                        viewModel.onIntent(ReadBookIntent.SetReadAloudCapsulePosition(x, y))
+                    },
+                    onTogglePause = {
+                        viewModel.onIntent(ReadBookIntent.ReadAloudTogglePause)
+                    },
+                    onStop = { viewModel.onIntent(ReadBookIntent.ReadAloudStop) },
+                    onOpenPlayer = { viewModel.onIntent(ReadBookIntent.OpenReadAloudPlayer) },
+                )
+            }
             ReadBookScreen(
                 state = state,
                 preferences = readPreferences,
@@ -575,10 +632,13 @@ private fun ReadBookViewLayer(
     onCursorTouch: View.OnTouchListener,
     readViewCallBack: ReadView.CallBack,
     contentTextViewCallBack: ContentTextView.CallBack,
+    isDarkTheme: Boolean,
+    onThemeChanged: (Boolean) -> Unit,
 ) {
     AndroidView(
         modifier = modifier.fillMaxSize(),
         factory = { context ->
+            onThemeChanged(isDarkTheme)
             FrameLayout(context).apply {
                 val readView = ReadView(
                     context = context,
@@ -643,6 +703,9 @@ private fun ReadBookViewLayer(
                     )
                 )
             }
+        },
+        update = {
+            onThemeChanged(isDarkTheme)
         },
     )
 }

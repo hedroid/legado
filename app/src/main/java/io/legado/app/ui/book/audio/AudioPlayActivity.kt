@@ -44,11 +44,14 @@ import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
 import io.legado.app.databinding.ActivityAudioPlayBinding
 import io.legado.app.domain.model.PlaybackTimer
+import io.legado.app.domain.gateway.OtherSettingsGateway
+import io.legado.app.domain.gateway.ReadAloudSettingsGateway
 import io.legado.app.help.book.isAudio
 import io.legado.app.help.book.removeType
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.config.themeConfig.ThemeConfig
 import io.legado.app.model.AudioPlay
+import org.koin.android.ext.android.inject
 import io.legado.app.model.BookCover
 import io.legado.app.model.SourceCallBack
 import io.legado.app.service.AudioPlayService
@@ -89,6 +92,9 @@ class AudioPlayActivity :
     VMBaseActivity<ActivityAudioPlayBinding, AudioPlayViewModel>(toolBarTheme = Theme.Dark),
     ChangeBookSourceDialog.CallBack,
     AudioPlay.CallBack {
+
+    private val otherSettingsGateway by inject<OtherSettingsGateway>()
+    private val readAloudSettingsGateway by inject<ReadAloudSettingsGateway>()
 
     override val binding by viewBinding(ActivityAudioPlayBinding::inflate)
     override val viewModel by viewModels<AudioPlayViewModel>()
@@ -199,8 +205,19 @@ class AudioPlayActivity :
                     putExtra("key", it.bookSourceUrl)
                 }
             }
-            R.id.menu_media_control -> AppConfig.systemMediaControlCompatibilityChange = !AppConfig.systemMediaControlCompatibilityChange
-            R.id.menu_wake_lock -> AppConfig.audioPlayUseWakeLock = !AppConfig.audioPlayUseWakeLock
+            R.id.menu_media_control -> lifecycleScope.launch {
+                readAloudSettingsGateway.update {
+                    it.copy(
+                        systemMediaControlCompatibilityChange =
+                            !it.systemMediaControlCompatibilityChange
+                    )
+                }
+            }
+            R.id.menu_wake_lock -> lifecycleScope.launch {
+                otherSettingsGateway.update {
+                    it.copy(audioPlayUseWakeLock = !it.audioPlayUseWakeLock)
+                }
+            }
             R.id.menu_copy_audio_url -> {
                 AudioPlay.book?.let {
                     SourceCallBack.callBackBtn(
@@ -622,7 +639,12 @@ class AudioPlayActivity :
             AudioPlay.stop()
             lifecycleScope.launch {
                 withContext(IO) {
-                    AudioPlay.book?.migrateTo(book, toc)
+                    AudioPlay.book?.migrateTo(
+                        book,
+                        toc,
+                        AppConfig.replaceEnableDefault,
+                        AppConfig.chineseConverterType,
+                    )
                     book.removeType(BookType.updateError)
                     AudioPlay.book?.delete()
                     appDb.bookDao.insert(book)

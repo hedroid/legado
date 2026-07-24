@@ -6,18 +6,21 @@ import android.graphics.RectF
 import android.os.Build
 import android.os.Bundle
 import android.util.AttributeSet
+import android.util.Log
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.WindowInsets
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.FrameLayout
+import io.legado.app.BuildConfig
 import io.legado.app.R
 import io.legado.app.constant.PageAnim
 import io.legado.app.data.entities.BookProgress
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
+import io.legado.app.model.ReadSessionState
 import io.legado.app.service.BaseReadAloudService
 
 import io.legado.app.ui.book.read.page.api.DataSource
@@ -631,7 +634,14 @@ class ReadView(
      */
     override fun upContent(relativePosition: Int, resetPageOffset: Boolean) {
         post {
-            contentDescription = pageFactory.curPage.text
+            val text = pageFactory.curPage.text
+            contentDescription = text
+            if (BuildConfig.DEBUG) {
+                // Device-independent readiness/page-change signal for the debug
+                // scenario runner (uiautomator does not expose ReadView on all
+                // devices). See tools/android/runner.py.
+                Log.i("LegadoDebug", "READER_PAGE " + text.replace("\n", " "))
+            }
         }
         if (isScroll && !isAutoPage) {
             if (relativePosition == 0) {
@@ -677,10 +687,34 @@ class ReadView(
     }
 
     /**
+     * 原子应用日夜主题颜色：先废弃旧正文录制缓存，再在同一主线程任务内更新
+     * 背景、正文画笔和页眉页脚，避免新背景与旧文字位图出现在同一帧。
+     */
+    fun applyThemeColors() {
+        ChapterProvider.upThemeColors()
+        invalidateTextPage()
+        ReadSessionState.updateBackground(width, height)
+        curPage.apply {
+            upThemeColors()
+            upBg()
+        }
+        prevPage.apply {
+            upThemeColors()
+            upBg()
+        }
+        nextPage.apply {
+            upThemeColors()
+            upBg()
+        }
+        pageDelegate?.postInvalidate()
+        invalidate()
+    }
+
+    /**
      * 更新背景
      */
     fun upBg() {
-        ReadBookConfig.upBg(width, height)
+        ReadSessionState.updateBackground(width, height)
         curPage.upBg()
         prevPage.upBg()
         nextPage.upBg()
