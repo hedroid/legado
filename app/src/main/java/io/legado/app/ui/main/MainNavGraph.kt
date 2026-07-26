@@ -411,6 +411,10 @@ fun MainActivity.mainEntryProvider(
         val controller = remember(readBookViewModel) {
             ReadBookController(this@mainEntryProvider, readBookViewModel)
         }
+        // ReadView 在首次组合时就会画一帧, 必须在它之前告诉 ViewModel 本路由要打开哪本书
+        remember(readBookViewModel, route) {
+            readBookViewModel.prepareCachedChapterFallback(route.bookUrl, route.chapterChanged)
+        }
         val lifecycleOwner = LocalLifecycleOwner.current
         val readIntent = remember(route) {
             MainActivity.createReadBookIntent(
@@ -443,12 +447,13 @@ fun MainActivity.mainEntryProvider(
             host = controller,
             controller = controller,
             onEffectsReady = { effectsReady.complete(Unit) },
-            onOpenSearch = { word, bookUrl ->
+            onOpenSearch = { word, bookUrl, autoFocus ->
                 onNavigateToRoute(
                     MainRouteSearchContent(
                         bookUrl = bookUrl,
                         searchWord = word,
-                        searchResultIndex = readBookViewModel.uiState.value.searchResultIndex
+                        searchResultIndex = readBookViewModel.uiState.value.searchResultIndex,
+                        autoFocus = autoFocus,
                     )
                 )
             },
@@ -521,6 +526,7 @@ fun MainActivity.mainEntryProvider(
         )
         SearchContentRouteScreen(
             viewModel = viewModel,
+            autoFocus = route.autoFocus,
             onBack = { onNavigateBack() },
         )
     }

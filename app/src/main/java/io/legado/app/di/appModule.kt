@@ -601,6 +601,7 @@ val appModule = module {
             otherSettingsGateway = get(),
             downloadCacheSettingsGateway = get(),
             backupSettingsGateway = get(),
+            themeSettingsGateway = get(),
         )
     }
     viewModelOf(::ChangeCoverViewModel)
@@ -643,7 +644,8 @@ val appModule = module {
             initialSearchWord = route.searchWord,
             searchResultIndex = route.searchResultIndex,
             bookRepository = get(),
-            searchContentRepository = get()
+            searchContentRepository = get(),
+            themeSettingsGateway = get(),
         )
     }
 }
