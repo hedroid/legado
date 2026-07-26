@@ -1133,6 +1133,7 @@
     <string name="wait_download">wait download</string>
     <string name="download_success">download success</string>
     <string name="download_error">download failure</string>
+    <string name="download_error_waiting_retry">failed, waiting to retry</string>
     <string name="downloading">downloading</string>
     <string name="unknown_state">unknown</string>
     <string name="disable_source">disable source</string>
@@ -1708,7 +1709,7 @@
     <string name="compact_list">Compact List</string>
     <string name="author_read">%1$s • %2$d Not read</string>
     <string name="menu_alpha_sum">Current %d%%</string>
-    <string name="menu_alpha">Menu Transparency</string>
+    <string name="menu_alpha">Menu opacity</string>
     <string name="change_source_option_title">Choose an Action</string>
     <string name="replace_current_book">Replace This Book</string>
     <string name="add_as_new_book">Add as New Book</string>
@@ -2327,7 +2328,7 @@
     <string name="show_tags">Show Tags</string>
     <string name="custom_tag_colors">Custom Tag Colors</string>
     <string name="manage_tag_colors">Manage Tag Colors</string>
-    <string name="search_filter_first">Search button opens filter first</string>
+    <string name="search_filter_first">Search button opens the search page directly</string>
     <string name="import_from_network">Import from Network</string>
     <string name="input_url_or_json_hint">Enter URL or JSON</string>
     <string name="history_label">History:</string>
@@ -2895,4 +2896,5 @@
     <string name="whole_book_page_format">Book %1$d / %2$d</string>
     <string name="whole_book_page_estimated_format">Book %1$s / %2$s</string>
     <string name="whole_book_page_unavailable">Book - / -</string>
+    <string name="translation_model_thinking">Model is thinking</string>
 </resources>

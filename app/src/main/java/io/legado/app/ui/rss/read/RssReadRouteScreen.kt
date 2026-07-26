@@ -60,7 +60,7 @@ import io.legado.app.ui.theme.responsiveHazeEffect
 import io.legado.app.ui.widget.components.AppScaffold
 import io.legado.app.ui.widget.components.AppTextField
 import io.legado.app.ui.widget.components.button.ConfirmDismissButtonsRow
-import io.legado.app.ui.widget.components.button.series.SmallPlainButton
+import io.legado.app.ui.widget.components.button.series.MediumTonalButton
 import io.legado.app.ui.widget.components.menuItem.MenuItemIcon
 import io.legado.app.ui.widget.components.menuItem.RoundDropdownMenu
 import io.legado.app.ui.widget.components.menuItem.RoundDropdownMenuItem
@@ -71,9 +71,9 @@ import io.legado.app.ui.widget.components.topbar.GlassTopAppBarDefaults
 import io.legado.app.ui.widget.components.topbar.TopBarActionButton
 import io.legado.app.ui.widget.components.topbar.TopBarNavigationButton
 import io.legado.app.utils.NetworkUtils
+import io.legado.app.utils.applyDayNight
 import io.legado.app.utils.keepScreenOn
 import io.legado.app.utils.openUrl
-import io.legado.app.utils.setDarkeningAllowed
 import io.legado.app.utils.share
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
@@ -203,8 +203,7 @@ fun RssReadRouteScreen(
 
     LaunchedEffect(isNight, webView) {
         val currentWebView = webView ?: return@LaunchedEffect
-        currentWebView.settings.setDarkeningAllowed(isNight)
-        currentWebView.postInvalidate()
+        currentWebView.applyDayNight(isNight)
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -474,7 +473,7 @@ private fun FavoriteEditSheet(
         onDismissRequest = onDismissRequest,
         title = stringResource(R.string.favorite),
         endAction = {
-            SmallPlainButton(
+            MediumTonalButton(
                 onClick = onDelete,
                 icon = Icons.Default.CleaningServices,
                 contentDescription = stringResource(R.string.delete)

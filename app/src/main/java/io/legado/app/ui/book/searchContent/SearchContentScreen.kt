@@ -44,10 +44,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -80,6 +80,7 @@ import org.koin.androidx.compose.koinViewModel
 @Composable
 fun SearchContentRouteScreen(
     onBack: () -> Unit,
+    autoFocus: Boolean = true,
     viewModel: SearchContentViewModel = koinViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -95,6 +96,7 @@ fun SearchContentRouteScreen(
     }
     SearchContentScreen(
         state = state,
+        autoFocus = autoFocus,
         onIntent = viewModel::onIntent,
         onBack = onBack,
     )
@@ -104,6 +106,7 @@ fun SearchContentRouteScreen(
 @Composable
 fun SearchContentScreen(
     state: SearchContentUiState,
+    autoFocus: Boolean = true,
     onIntent: (SearchContentIntent) -> Unit,
     onBack: () -> Unit,
 ) {
@@ -116,11 +119,18 @@ fun SearchContentScreen(
     val isSearching = state.isSearching
     val searchResults = state.searchResults
     val durChapterIndex = state.durChapterIndex
+    val isEInkMode = state.isEInkMode
     val error = state.error
 
     val scrollBehavior = GlassTopAppBarDefaults.defaultScrollBehavior()
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val hideSearchKeyboard = {
+        focusManager.clearFocus(force = true)
+        keyboardController?.hide()
+    }
 
     val scrollToCurrentChapter = {
         val targetIndex = searchResults.indexOfFirst { it.chapterIndex == durChapterIndex }
@@ -193,6 +203,7 @@ fun SearchContentScreen(
                 ) {
                     SearchBar(
                         query = searchQuery,
+                        autoFocus = autoFocus,
                         scrollState = listState,
                         onQueryChange = { onIntent(SearchContentIntent.UpdateQuery(it)) },
                         trailingIcon = {
@@ -272,6 +283,7 @@ fun SearchContentScreen(
                             history = searchHistory,
                             onlyThisBook = historyOnlyThisBook,
                             onHistoryClick = {
+                                hideSearchKeyboard()
                                 onIntent(SearchContentIntent.UpdateQuery(it.query))
                             },
                             onDeleteHistory = {
@@ -299,6 +311,7 @@ fun SearchContentScreen(
                                 SearchResultItem(
                                     modifier = Modifier.animateItem(),
                                     result = result,
+                                    isEInkMode = isEInkMode,
                                     isCurrentChapter = result.chapterIndex == durChapterIndex,
                                     onClick = {
                                         onIntent(SearchContentIntent.OpenResult(result))
@@ -411,6 +424,7 @@ fun SearchHistoryList(
 fun SearchResultItem(
     modifier: Modifier,
     result: SearchResult,
+    isEInkMode: Boolean,
     isCurrentChapter: Boolean,
     onClick: () -> Unit
 ) {
@@ -428,13 +442,10 @@ fun SearchResultItem(
 
             Column {
                 AppText(
-                    text = buildAnnotatedString {
-                        append(
-                            result.getTitleSpannable(
-                                LegadoTheme.colorScheme.primary.toArgb()
-                            )
-                        )
-                    },
+                    text = result.getTitleAnnotatedString(
+                        accentColor = LegadoTheme.colorScheme.primary,
+                        isEInkMode = isEInkMode,
+                    ),
                     style = LegadoTheme.typography.titleSmall
                 )
 
@@ -445,15 +456,12 @@ fun SearchResultItem(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 AppText(
-                    text = buildAnnotatedString {
-                        append(
-                            result.getContentSpannable(
-                                textColor = LegadoTheme.colorScheme.onSurface.toArgb(),
-                                accentColor = LegadoTheme.colorScheme.primary.toArgb(),
-                                bgColor = LegadoTheme.colorScheme.primaryContainer.toArgb()
-                            )
-                        )
-                    },
+                    text = result.getContentAnnotatedString(
+                        textColor = LegadoTheme.colorScheme.onSurface,
+                        accentColor = LegadoTheme.colorScheme.primary,
+                        backgroundColor = LegadoTheme.colorScheme.primaryContainer,
+                        isEInkMode = isEInkMode,
+                    ),
                     style = LegadoTheme.typography.bodyMedium
                 )
             }
