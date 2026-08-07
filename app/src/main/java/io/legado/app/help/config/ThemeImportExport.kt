@@ -40,6 +40,11 @@ object ThemeImportExport {
             "navIconExplore" to data.navIconExplore,
             "navIconRss" to data.navIconRss,
             "navIconMy" to data.navIconMy,
+            "navIconHomeSelected" to data.navIconHomeSelected,
+            "navIconBookshelfSelected" to data.navIconBookshelfSelected,
+            "navIconExploreSelected" to data.navIconExploreSelected,
+            "navIconRssSelected" to data.navIconRssSelected,
+            "navIconMySelected" to data.navIconMySelected,
             "appFontPath" to data.appFontPath,
         )
 
@@ -130,6 +135,16 @@ object ThemeImportExport {
                 navIconExplore = embeddedAssets.paths["navIconExplore"] ?: data.navIconExplore,
                 navIconRss = embeddedAssets.paths["navIconRss"] ?: data.navIconRss,
                 navIconMy = embeddedAssets.paths["navIconMy"] ?: data.navIconMy,
+                navIconHomeSelected = embeddedAssets.paths["navIconHomeSelected"]
+                    ?: data.navIconHomeSelected,
+                navIconBookshelfSelected = embeddedAssets.paths["navIconBookshelfSelected"]
+                    ?: data.navIconBookshelfSelected,
+                navIconExploreSelected = embeddedAssets.paths["navIconExploreSelected"]
+                    ?: data.navIconExploreSelected,
+                navIconRssSelected = embeddedAssets.paths["navIconRssSelected"]
+                    ?: data.navIconRssSelected,
+                navIconMySelected = embeddedAssets.paths["navIconMySelected"]
+                    ?: data.navIconMySelected,
                 launcherIcon = LauncherIconHelp.normalizeIcon(data.launcherIcon) ?: "ic_launcher",
                 appFontPath = embeddedAssets.paths["appFontPath"] ?: data.appFontPath,
                 coverDefaultImage = appliedAssets.lightCoverPaths.joinToString(","),
