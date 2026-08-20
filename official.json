@@ -8,42 +8,42 @@
     {
       "browser_download_url": "https://github.com/hedroid/legado/releases/download/3.26.16/legado-3.26.16-arm64-v8a.apk",
       "content_type": "application/vnd.android.package-archive",
-      "created_at": "2026-08-19T18:40:05Z",
+      "created_at": "2026-08-20T06:28:08Z",
       "download_count": 0,
-      "id": 521210951,
+      "id": 521859753,
       "name": "legado-3.26.16-arm64-v8a.apk",
       "state": "uploaded",
-      "url": "https://api.github.com/repos/hedroid/legado/releases/assets/521210951"
+      "url": "https://api.github.com/repos/hedroid/legado/releases/assets/521859753"
     },
     {
       "browser_download_url": "https://github.com/hedroid/legado/releases/download/3.26.16/legado-3.26.16-armeabi-v7a.apk",
       "content_type": "application/vnd.android.package-archive",
-      "created_at": "2026-08-19T18:40:05Z",
+      "created_at": "2026-08-20T06:28:08Z",
       "download_count": 0,
-      "id": 521210947,
+      "id": 521859751,
       "name": "legado-3.26.16-armeabi-v7a.apk",
       "state": "uploaded",
-      "url": "https://api.github.com/repos/hedroid/legado/releases/assets/521210947"
+      "url": "https://api.github.com/repos/hedroid/legado/releases/assets/521859751"
     },
     {
       "browser_download_url": "https://github.com/hedroid/legado/releases/download/3.26.16/legado-3.26.16.apk",
       "content_type": "application/vnd.android.package-archive",
-      "created_at": "2026-08-19T18:40:05Z",
+      "created_at": "2026-08-20T06:28:08Z",
       "download_count": 0,
-      "id": 521210948,
+      "id": 521859752,
       "name": "legado-3.26.16.apk",
       "state": "uploaded",
-      "url": "https://api.github.com/repos/hedroid/legado/releases/assets/521210948"
+      "url": "https://api.github.com/repos/hedroid/legado/releases/assets/521859752"
     },
     {
       "browser_download_url": "https://github.com/hedroid/legado/releases/download/3.26.16/mapping.txt",
       "content_type": "text/plain",
-      "created_at": "2026-08-19T18:40:05Z",
+      "created_at": "2026-08-20T06:28:08Z",
       "download_count": 0,
-      "id": 521210950,
+      "id": 521859754,
       "name": "mapping.txt",
       "state": "uploaded",
-      "url": "https://api.github.com/repos/hedroid/legado/releases/assets/521210950"
+      "url": "https://api.github.com/repos/hedroid/legado/releases/assets/521859754"
     }
   ]
 }
