@@ -1,5 +1,7 @@
 package io.legado.app.ui.config.backupConfig
 
+import android.net.Uri
+import android.provider.DocumentsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -62,6 +64,7 @@ import io.legado.app.ui.widget.components.tabRow.CardTabRow
 import io.legado.app.ui.widget.components.topbar.GlassMediumFlexibleTopAppBar
 import io.legado.app.ui.widget.components.topbar.GlassTopAppBarDefaults
 import io.legado.app.ui.widget.components.topbar.TopBarNavigationButton
+import io.legado.app.utils.RealPathUtil
 import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.takePersistablePermissionSafely
 import kotlinx.collections.immutable.ImmutableList
@@ -232,7 +235,9 @@ fun BackupConfigScreen(
                 SplicedColumnGroup(title = stringResource(R.string.backup_restore)) {
                     ClickableSettingItem(
                         title = stringResource(R.string.backup_path),
-                        description = settings.backupPath ?: stringResource(R.string.select_backup_path),
+                        description = settings.backupPath
+                            ?.let(::displayBackupPath)
+                            ?: stringResource(R.string.select_backup_path),
                         onClick = {
                             onIntent(BackupConfigIntent.OpenSheet(BackupConfigSheet.ChooseBackupPath))
                         },
@@ -279,6 +284,20 @@ fun BackupConfigScreen(
 
     BackupConfigSheets(state, onIntent)
     BackupConfigDialogs(state, onIntent)
+}
+
+private fun displayBackupPath(path: String): String {
+    val uri = Uri.parse(path)
+    return runCatching {
+        RealPathUtil.getTreePath(uri)
+            ?: if (DocumentsContract.isTreeUri(uri)) {
+                DocumentsContract.getTreeDocumentId(uri)
+                    .substringAfter(':')
+                    .takeIf(String::isNotBlank)
+            } else {
+                null
+            }
+    }.getOrNull()?.takeIf(String::isNotBlank) ?: path
 }
 
 @Composable
