@@ -644,7 +644,7 @@ class ReadConfigUpdateDelegate(
                     // 等写入落地再发 UpdateStyle，否则 upBookmarkBadge 读到旧尺寸
                     readSettingsRepository.preferences.first { it.bookmarkBadgeSize == update.value }
                     host.emitEffect(
-                        ReadBookEffect.UpdateReadViewConfig(setOf(ConfigUpdateAction.UpdateStyle))
+                        ReadBookEffect.UpdateReaderConfig(setOf(ConfigUpdateAction.UpdateStyle))
                     )
                 }
             }
@@ -679,6 +679,16 @@ class ReadConfigUpdateDelegate(
                 }
                 scope.launch {
                     readSettingsRepository.setAutoSuggestDayNight(update.value)
+                }
+            }
+            is ConfigUpdate.ReadingAnchorEnabled -> {
+                scope.launch {
+                    readSettingsRepository.setReadingAnchorEnabled(update.value)
+                }
+            }
+            is ConfigUpdate.ReadAloudDetachReminderEnabled -> {
+                scope.launch {
+                    readSettingsRepository.setReadAloudDetachReminderEnabled(update.value)
                 }
             }
             is ConfigUpdate.SelectText -> {
@@ -747,7 +757,7 @@ class ReadConfigUpdateDelegate(
             host.refreshConfigSnapshots()
         }
         if (update.actions.isNotEmpty()) {
-            host.emitEffect(ReadBookEffect.UpdateReadViewConfig(update.actions))
+            host.emitEffect(ReadBookEffect.UpdateReaderConfig(update.actions))
         }
     }
 

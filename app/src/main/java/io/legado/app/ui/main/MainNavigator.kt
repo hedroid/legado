@@ -22,7 +22,15 @@ object MainNavigator {
     }
     private var backNavigationResetJob: Job? = null
 
-    fun navigateToRoute(backStack: MutableList<NavKey>, route: NavKey) {
+    fun navigateToRoute(
+        backStack: MutableList<NavKey>,
+        route: NavKey,
+        resetToHome: Boolean = false,
+    ) {
+        if (resetToHome) {
+            backStack.clear()
+            backStack.add(MainRouteHome)
+        }
         val currentRoute = backStack.lastOrNull()
         if (currentRoute == route) return
 
@@ -150,6 +158,7 @@ object MainNavigator {
                     currentRoute == MainRouteHome ||
                     currentRoute is MainRouteBookInfo ||
                     currentRoute is MainRouteExploreShow ||
+                    currentRoute is MainRouteBookSourceManage ||
                     currentRoute is MainRouteSearch
                 ) {
                     backStack.add(route)
@@ -166,6 +175,7 @@ object MainNavigator {
                     currentRoute is MainRouteSearch ||
                     currentRoute is MainRouteExploreShow ||
                     currentRoute is MainRouteBookInfo ||
+                    currentRoute is MainRouteCache ||
                     currentRoute is MainRouteReadManga
                 ) {
                     backStack.add(route)

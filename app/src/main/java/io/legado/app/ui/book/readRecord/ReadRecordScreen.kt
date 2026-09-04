@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -45,6 +44,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -81,6 +81,7 @@ import io.legado.app.ui.widget.components.SearchBar
 import io.legado.app.ui.widget.components.alert.AppAlertDialog
 import io.legado.app.ui.widget.components.card.GlassCard
 import io.legado.app.ui.widget.components.card.TextCard
+import io.legado.app.ui.widget.components.checkBox.AppCheckbox
 import io.legado.app.ui.widget.components.checkBox.CheckboxItem
 import io.legado.app.ui.widget.components.heatmap.HeatmapCalendarEndAction
 import io.legado.app.ui.widget.components.heatmap.HeatmapCalendarStartAction
@@ -95,6 +96,7 @@ import io.legado.app.ui.widget.components.heatmap.rememberDateRange
 import io.legado.app.ui.widget.components.heatmap.rememberDaysInRange
 import io.legado.app.ui.widget.components.heatmap.rememberWeeks
 import io.legado.app.ui.widget.components.image.cover.CoilBookCover
+import io.legado.app.ui.widget.components.lazylist.FastScrollLazyColumn
 import io.legado.app.ui.widget.components.list.TopFloatingStickyItem
 import io.legado.app.ui.widget.components.modalBottomSheet.AppModalBottomSheet
 import io.legado.app.ui.widget.components.settingItem.CompactClickableSettingItem
@@ -108,10 +110,10 @@ import io.legado.app.ui.widget.components.topbar.TopBarActionButton
 import io.legado.app.ui.widget.components.topbar.TopBarNavigationButton
 import io.legado.app.utils.StringUtils.formatFriendlyDate
 import io.legado.app.utils.formatReadDuration
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import java.time.Instant
 import java.time.LocalDate
@@ -379,7 +381,7 @@ fun ReadRecordScreen(
 
                 "CONTENT" -> {
                     Box(modifier = Modifier.fillMaxSize()) {
-                        LazyColumn(
+                        FastScrollLazyColumn(
                             state = listState,
                             modifier = Modifier.fillMaxSize(),
                             contentPadding = adaptiveContentPaddingOnlyVertical(
@@ -577,6 +579,7 @@ fun ReadRecordScreen(
             } ?: emptySet()
         )
     }
+    var mergeCandidateQuery by rememberSaveable(mergeDialogData != null) { mutableStateOf("") }
 
     AppAlertDialog(
         data = mergeDialogData,
@@ -594,28 +597,61 @@ fun ReadRecordScreen(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
 
-                LazyColumn(modifier = Modifier.height(320.dp)) {
-                    items(candidates, key = { it.mergeKey() }) { candidate ->
+                SearchBar(
+                    query = mergeCandidateQuery,
+                    onQueryChange = { mergeCandidateQuery = it },
+                    autoFocus = false,
+                    placeholder = stringResource(R.string.search_placeholder),
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                FastScrollLazyColumn(modifier = Modifier.height(320.dp)) {
+                    val filteredCandidates = candidates.filter { candidate ->
+                        mergeCandidateQuery.isBlank() ||
+                            candidate.bookName.contains(mergeCandidateQuery, ignoreCase = true) ||
+                            candidate.bookAuthor.contains(mergeCandidateQuery, ignoreCase = true)
+                    }
+                    items(filteredCandidates, key = { it.mergeKey() }) { candidate ->
                         val author = candidate.bookAuthor.ifBlank { unknownAuthor }
                         val candidateKey = candidate.mergeKey()
                         val isChecked = selectedMergeKeys.contains(candidateKey)
 
-                        CheckboxItem(
-                            title = stringResource(
-                                R.string.merge_read_record_candidate,
-                                candidate.bookName,
-                                author,
-                                formatDuring(candidate.readTime)
-                            ),
-                            checked = isChecked,
-                            onCheckedChange = { checked ->
-                                selectedMergeKeys = if (checked) {
-                                    selectedMergeKeys + candidateKey
-                                } else {
-                                    selectedMergeKeys - candidateKey
+                        GlassCard(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                        ) {
+                            Box(modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp)) {
+                                Column(modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(end = 48.dp)) {
+                                    AppText(text = candidate.bookName)
+                                    AppText(
+                                        text = author,
+                                        style = LegadoTheme.typography.bodySmall,
+                                        color = LegadoTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    AppText(
+                                        text = formatDuring(candidate.readTime),
+                                        style = LegadoTheme.typography.bodySmall,
+                                        color = LegadoTheme.colorScheme.onSurfaceVariant,
+                                    )
                                 }
+                                AppCheckbox(
+                                    checked = isChecked,
+                                    onCheckedChange = { checked ->
+                                        selectedMergeKeys = if (checked) {
+                                            selectedMergeKeys + candidateKey
+                                        } else {
+                                            selectedMergeKeys - candidateKey
+                                        }
+                                    },
+                                    modifier = Modifier.align(Alignment.CenterEnd),
+                                )
                             }
-                        )
+                        }
                     }
                 }
             }

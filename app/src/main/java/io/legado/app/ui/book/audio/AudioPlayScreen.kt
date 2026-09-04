@@ -1,9 +1,10 @@
 package io.legado.app.ui.book.audio
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,25 +18,33 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
+import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Crop
+import androidx.compose.material.icons.filled.CropFree
+import androidx.compose.material.icons.filled.CropSquare
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Login
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
@@ -44,16 +53,16 @@ import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Timer
-import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.WbTwilight
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -71,6 +80,7 @@ import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import io.legado.app.R
+import io.legado.app.constant.CoverRatio
 import io.legado.app.constant.ReadAloudBgMode
 import io.legado.app.constant.Status
 import io.legado.app.domain.model.PlaybackTimer
@@ -80,7 +90,6 @@ import io.legado.app.ui.theme.hazeStyle.HazeLegado
 import io.legado.app.ui.util.rememberBlurBackdrop
 import io.legado.app.ui.widget.components.AppScaffold
 import io.legado.app.ui.widget.components.button.series.MediumPlainButton
-import io.legado.app.ui.widget.components.button.series.MediumTonalButton
 import io.legado.app.ui.widget.components.button.series.SmallAnimatedButton
 import io.legado.app.ui.widget.components.icon.AppIcons
 import io.legado.app.ui.widget.components.image.cover.BookCoverImage
@@ -89,16 +98,21 @@ import io.legado.app.ui.widget.components.menuItem.MenuItemIcon
 import io.legado.app.ui.widget.components.menuItem.RoundDropdownMenu
 import io.legado.app.ui.widget.components.menuItem.RoundDropdownMenuItem
 import io.legado.app.ui.widget.components.modalBottomSheet.AppModalBottomSheet
+import io.legado.app.ui.widget.components.modalBottomSheet.OptionCard
+import io.legado.app.ui.widget.components.modalBottomSheet.OptionSheet
 import io.legado.app.ui.widget.components.pager.rememberPagerFlingPassThroughConnection
+import io.legado.app.ui.widget.components.player.AnimatedPlayPauseButton
 import io.legado.app.ui.widget.components.player.PlayerAdjustmentSlider
 import io.legado.app.ui.widget.components.player.PlayerBackground
 import io.legado.app.ui.widget.components.player.PlayerProgressSlider
 import io.legado.app.ui.widget.components.player.PlayerTocPage
 import io.legado.app.ui.widget.components.player.playerBgModeLabel
 import io.legado.app.ui.widget.components.text.AppText
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalHazeMaterialsApi::class)
@@ -108,17 +122,16 @@ fun AudioPlayScreenContent(
     onIntent: (AudioPlayIntent) -> Unit,
     onBack: () -> Unit,
 ) {
+    val horizontalPagerState = rememberPagerState(
+        initialPage = 0,
+        pageCount = { if (state.lyricLines.isEmpty()) 1 else 2 },
+    )
     val verticalPagerState = rememberPagerState(initialPage = 0, pageCount = { 2 })
     val verticalPagerNestedScrollConnection = rememberPagerFlingPassThroughConnection(
         state = verticalPagerState,
         orientation = Orientation.Vertical,
     )
     val coroutineScope = rememberCoroutineScope()
-    var activeAdjustment by remember { mutableStateOf<AudioAdjustment?>(null) }
-    var speedPreview by remember(state.speed) { mutableFloatStateOf(state.speed) }
-    var timerPreview by remember(state.timerMinutes) {
-        mutableFloatStateOf(state.timerMinutes.toFloat())
-    }
     var menuExpanded by remember { mutableStateOf(false) }
     val pagerHazeState = remember { HazeState() }
     val hazeEnabled =
@@ -130,13 +143,7 @@ fun AudioPlayScreenContent(
     )
     val pageContentPadding = PaddingValues(
         top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 88.dp,
-        bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + when (
-            activeAdjustment
-        ) {
-            null -> 216.dp
-            AudioAdjustment.Speed -> 264.dp
-            AudioAdjustment.Timer -> 344.dp
-        },
+        bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 216.dp,
     )
     AppScaffold(
         modifier = Modifier.fillMaxSize(),
@@ -165,18 +172,18 @@ fun AudioPlayScreenContent(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    MediumTonalButton(
+                    MediumPlainButton(
                         onClick = onBack,
                         icon = AppIcons.Back,
                         contentDescription = stringResource(R.string.back),
                     )
 
                     Box {
-                        MediumTonalButton(
+                        MediumPlainButton(
                             onClick = { menuExpanded = true },
                             icon = AppIcons.MoreVert,
                             contentDescription = stringResource(R.string.more),
@@ -199,7 +206,7 @@ fun AudioPlayScreenContent(
                                 RoundDropdownMenuItem(
                                     text = stringResource(R.string.login),
                                     leadingIcon = {
-                                        MenuItemIcon(Icons.Default.Login)
+                                        MenuItemIcon(Icons.AutoMirrored.Filled.Login)
                                     },
                                     onClick = {
                                         dismiss()
@@ -240,11 +247,21 @@ fun AudioPlayScreenContent(
                             RoundDropdownMenuItem(
                                 text = stringResource(R.string.audio_play_gain),
                                 leadingIcon = {
-                                    MenuItemIcon(Icons.Default.VolumeUp)
+                                    MenuItemIcon(Icons.AutoMirrored.Filled.VolumeUp)
                                 },
                                 onClick = {
                                     dismiss()
                                     onIntent(AudioPlayIntent.OpenSheet(AudioPlaySheet.Gain))
+                                },
+                            )
+                            RoundDropdownMenuItem(
+                                text = stringResource(R.string.audio_play_cover_ratio),
+                                leadingIcon = {
+                                    MenuItemIcon(Icons.Default.Crop)
+                                },
+                                onClick = {
+                                    dismiss()
+                                    onIntent(AudioPlayIntent.OpenSheet(AudioPlaySheet.CoverRatioOptions))
                                 },
                             )
                             RoundDropdownMenuItem(
@@ -334,7 +351,7 @@ fun AudioPlayScreenContent(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 12.dp),
+                        .padding(top = 16.dp, bottom = 4.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -344,24 +361,15 @@ fun AudioPlayScreenContent(
                         icon = Icons.Default.SkipPrevious,
                         contentDescription = stringResource(R.string.previous_chapter),
                     )
-                    Box(contentAlignment = Alignment.Center) {
-                        MediumTonalButton(
-                            onClick = { onIntent(AudioPlayIntent.TogglePlay) },
-                            onLongClick = { onIntent(AudioPlayIntent.Stop) },
-                            icon = if (state.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = stringResource(
-                                if (state.isPlaying) R.string.pause else R.string.audio_play
-                            ),
-                            modifier = Modifier.size(72.dp),
-                        )
-                        if (state.isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(56.dp),
-                                strokeWidth = 3.dp,
-                                color = LegadoTheme.colorScheme.onSecondaryContainer,
-                            )
-                        }
-                    }
+                    AnimatedPlayPauseButton(
+                        isPlaying = state.isPlaying,
+                        isLoading = state.isLoading,
+                        contentDescription = stringResource(
+                            if (state.isPlaying) R.string.pause else R.string.audio_play
+                        ),
+                        onClick = { onIntent(AudioPlayIntent.TogglePlay) },
+                        onLongClick = { onIntent(AudioPlayIntent.Stop) },
+                    )
                     MediumPlainButton(
                         onClick = { onIntent(AudioPlayIntent.NextChapter) },
                         enabled = state.canNext,
@@ -396,6 +404,15 @@ fun AudioPlayScreenContent(
                         ),
                         onCheckedChange = {
                             coroutineScope.launch {
+                                if (horizontalPagerState.currentPage != 0) {
+                                    horizontalPagerState.animateScrollToPage(
+                                        page = 0,
+                                        animationSpec = tween(
+                                            durationMillis = 520,
+                                            easing = FastOutSlowInEasing,
+                                        ),
+                                    )
+                                }
                                 verticalPagerState.animateScrollToPage(
                                     page = if (verticalPagerState.currentPage == 0) 1 else 0,
                                     animationSpec = tween(
@@ -429,7 +446,7 @@ fun AudioPlayScreenContent(
                         text = stringResource(R.string.audio_play_speed),
                         contentDescription = stringResource(R.string.audio_play_speed),
                         onCheckedChange = {
-                            activeAdjustment = activeAdjustment.toggle(AudioAdjustment.Speed)
+                            onIntent(AudioPlayIntent.OpenSheet(AudioPlaySheet.Speed))
                         },
                     )
                     SmallAnimatedButton(
@@ -439,46 +456,8 @@ fun AudioPlayScreenContent(
                         text = stringResource(R.string.set_timer),
                         contentDescription = stringResource(R.string.set_timer),
                         onCheckedChange = {
-                            activeAdjustment = activeAdjustment.toggle(AudioAdjustment.Timer)
+                            onIntent(AudioPlayIntent.OpenSheet(AudioPlaySheet.Timer))
                         },
-                    )
-                }
-                AnimatedVisibility(activeAdjustment == AudioAdjustment.Speed) {
-                    PlayerAdjustmentSlider(
-                        title = stringResource(R.string.audio_play_speed),
-                        value = speedPreview.coerceIn(AUDIO_SPEED_MIN, AUDIO_SPEED_MAX),
-                        valueLabel = String.format(Locale.ROOT, "%.1fX", speedPreview),
-                        startLabel = "0.5X",
-                        endLabel = "5.0X",
-                        enabled = state.status != Status.STOP,
-                        onValueChange = { speedPreview = it },
-                        onValueChangeFinished = {
-                            onIntent(AudioPlayIntent.SetSpeed(speedPreview))
-                        },
-                        valueRange = AUDIO_SPEED_MIN..AUDIO_SPEED_MAX,
-                        steps = 44,
-                    )
-                }
-                AnimatedVisibility(activeAdjustment == AudioAdjustment.Timer) {
-                    PlayerAdjustmentSlider(
-                        title = stringResource(R.string.set_timer),
-                        value = timerPreview.coerceIn(
-                            PlaybackTimer.MIN_MINUTES.toFloat(),
-                            PlaybackTimer.MAX_MINUTES.toFloat(),
-                        ),
-                        valueLabel = if (timerPreview == 0f) {
-                            stringResource(R.string.close)
-                        } else {
-                            stringResource(R.string.timer_m, timerPreview.roundToInt())
-                        },
-                        startLabel = stringResource(R.string.close),
-                        endLabel = stringResource(R.string.timer_m, PlaybackTimer.MAX_MINUTES),
-                        onValueChange = { timerPreview = it.roundToInt().toFloat() },
-                        onValueChangeFinished = {
-                            onIntent(AudioPlayIntent.SetTimer(timerPreview.roundToInt()))
-                        },
-                        valueRange = PlaybackTimer.MIN_MINUTES.toFloat()..PlaybackTimer.MAX_MINUTES.toFloat(),
-                        steps = PlaybackTimer.MAX_MINUTES - PlaybackTimer.MIN_MINUTES - 1,
                     )
                 }
             }
@@ -501,21 +480,35 @@ fun AudioPlayScreenContent(
                     Modifier
                 },
             )
-            VerticalPager(
-                state = verticalPagerState,
+            HorizontalPager(
+                state = horizontalPagerState,
                 modifier = Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                pageNestedScrollConnection = verticalPagerNestedScrollConnection,
+                verticalAlignment = Alignment.CenterVertically,
             ) { page ->
                 if (page == 0) {
-                    AudioCoverPage(state, pageContentPadding)
+                    VerticalPager(
+                        state = verticalPagerState,
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        pageNestedScrollConnection = verticalPagerNestedScrollConnection,
+                    ) { verticalPage ->
+                        if (verticalPage == 0) {
+                            AudioCoverPage(state, pageContentPadding)
+                        } else {
+                            PlayerTocPage(
+                                chapters = state.chapters,
+                                currentIndex = state.chapterIndex,
+                                isPaused = !state.isPlaying,
+                                onSelect = { onIntent(AudioPlayIntent.SelectChapter(it)) },
+                                contentPadding = pageContentPadding,
+                            )
+                        }
+                    }
                 } else {
-                    PlayerTocPage(
-                        chapters = state.chapters,
-                        currentIndex = state.chapterIndex,
-                        isPaused = !state.isPlaying,
-                        onSelect = { onIntent(AudioPlayIntent.SelectChapter(it)) },
+                    AudioLyricPage(
+                        state = state,
                         contentPadding = pageContentPadding,
+                        onIntent = onIntent,
                     )
                 }
             }
@@ -534,6 +527,23 @@ fun AudioPlayScreenContent(
         onDismissRequest = { onIntent(AudioPlayIntent.DismissSheet) },
         onIntent = onIntent,
     )
+    AudioCoverRatioSheet(
+        show = state.activeSheet == AudioPlaySheet.CoverRatioOptions,
+        onDismissRequest = { onIntent(AudioPlayIntent.DismissSheet) },
+        onIntent = onIntent,
+    )
+    AudioSpeedSheet(
+        show = state.activeSheet == AudioPlaySheet.Speed,
+        state = state,
+        onDismissRequest = { onIntent(AudioPlayIntent.DismissSheet) },
+        onIntent = onIntent,
+    )
+    AudioTimerSheet(
+        show = state.activeSheet == AudioPlaySheet.Timer,
+        state = state,
+        onDismissRequest = { onIntent(AudioPlayIntent.DismissSheet) },
+        onIntent = onIntent,
+    )
     AppLogSheet(
         show = state.activeSheet == AudioPlaySheet.Log,
         onDismissRequest = { onIntent(AudioPlayIntent.DismissSheet) },
@@ -543,6 +553,77 @@ fun AudioPlayScreenContent(
 private const val AUDIO_GAIN_MIN = -6000
 private const val AUDIO_GAIN_MAX = 6000
 private const val CREDITS_MAX_SECONDS = 180
+
+@Composable
+private fun AudioLyricPage(
+    state: AudioPlayUiState,
+    contentPadding: PaddingValues,
+    onIntent: (AudioPlayIntent) -> Unit,
+) {
+    val listState = rememberLazyListState()
+    val activeLine = state.lyricLines.indexOfLast { it.timestampMs <= state.position }
+
+    LaunchedEffect(state.lyricLines, activeLine) {
+        if (activeLine !in state.lyricLines.indices) return@LaunchedEffect
+
+        snapshotFlow { listState.layoutInfo.viewportSize.height }.first { it > 0 }
+        val layoutInfo = listState.layoutInfo
+        val viewportHeight = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
+        val targetDistance = viewportHeight * 0.32f
+        val targetOffset = layoutInfo.viewportStartOffset + targetDistance
+        val visibleItem = layoutInfo.visibleItemsInfo.firstOrNull { it.index == activeLine }
+        val scrollDistance = if (visibleItem != null) {
+            visibleItem.offset - targetOffset
+        } else {
+            val approachDistance = (viewportHeight * 0.08f).coerceAtLeast(1f)
+            listState.scrollToItem(
+                index = activeLine,
+                scrollOffset = -(targetDistance + approachDistance).roundToInt(),
+            )
+            approachDistance
+        }
+        if (abs(scrollDistance) > 1f) {
+            listState.animateScrollBy(
+                value = scrollDistance,
+                animationSpec = tween(durationMillis = 520, easing = FastOutSlowInEasing),
+            )
+        }
+    }
+
+    LazyColumn(
+        state = listState,
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp),
+        contentPadding = PaddingValues(
+            top = contentPadding.calculateTopPadding(),
+            bottom = contentPadding.calculateBottomPadding(),
+        ),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        itemsIndexed(
+            items = state.lyricLines,
+            key = { index, line -> "${line.timestampMs}:$index" },
+            contentType = { _, _ -> "audio_lyric_line" },
+        ) { index, line ->
+            val active = index == activeLine
+            AppText(
+                text = line.text,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .clickable { onIntent(AudioPlayIntent.SeekTo(line.timestampMs)) }
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                style = LegadoTheme.typography.titleLargeEmphasized,
+                color = if (active) {
+                    LegadoTheme.colorScheme.onSurface
+                } else {
+                    LegadoTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                },
+            )
+        }
+    }
+}
 
 @Composable
 private fun AudioSkipCreditsSheet(
@@ -622,6 +703,120 @@ private fun AudioGainSheet(
     }
 }
 
+@Composable
+private fun AudioCoverRatioSheet(
+    show: Boolean,
+    onDismissRequest: () -> Unit,
+    onIntent: (AudioPlayIntent) -> Unit,
+) {
+    OptionSheet(
+        show = show,
+        onDismissRequest = onDismissRequest,
+        title = stringResource(R.string.audio_play_cover_ratio),
+    ) {
+        OptionCard(
+            icon = Icons.Default.CropSquare,
+            text = stringResource(R.string.cover_ratio_square),
+            onClick = {
+                onDismissRequest()
+                onIntent(AudioPlayIntent.SetCoverRatio(CoverRatio.Square))
+            },
+        )
+        OptionCard(
+            icon = Icons.Default.RadioButtonUnchecked,
+            text = stringResource(R.string.cover_ratio_circle),
+            onClick = {
+                onDismissRequest()
+                onIntent(AudioPlayIntent.SetCoverRatio(CoverRatio.Circle))
+            },
+        )
+        OptionCard(
+            icon = Icons.Default.Book,
+            text = stringResource(R.string.cover_ratio_book),
+            onClick = {
+                onDismissRequest()
+                onIntent(AudioPlayIntent.SetCoverRatio(CoverRatio.Book))
+            },
+        )
+        OptionCard(
+            icon = Icons.Default.CropFree,
+            text = stringResource(R.string.cover_ratio_unrestricted),
+            onClick = {
+                onDismissRequest()
+                onIntent(AudioPlayIntent.SetCoverRatio(CoverRatio.Unrestricted))
+            },
+        )
+    }
+}
+
+@Composable
+private fun AudioSpeedSheet(
+    show: Boolean,
+    state: AudioPlayUiState,
+    onDismissRequest: () -> Unit,
+    onIntent: (AudioPlayIntent) -> Unit,
+) {
+    var speedPreview by remember(state.speed) { mutableFloatStateOf(state.speed) }
+    AppModalBottomSheet(
+        show = show,
+        onDismissRequest = onDismissRequest,
+        title = stringResource(R.string.audio_play_speed),
+    ) {
+        PlayerAdjustmentSlider(
+            title = stringResource(R.string.audio_play_speed),
+            value = speedPreview.coerceIn(AUDIO_SPEED_MIN, AUDIO_SPEED_MAX),
+            valueLabel = String.format(Locale.ROOT, "%.1fX", speedPreview),
+            startLabel = "0.5X",
+            endLabel = "5.0X",
+            enabled = state.status != Status.STOP,
+            onValueChange = { speedPreview = it },
+            onValueChangeFinished = {
+                onIntent(AudioPlayIntent.SetSpeed(speedPreview))
+            },
+            valueRange = AUDIO_SPEED_MIN..AUDIO_SPEED_MAX,
+            steps = 44,
+        )
+    }
+}
+
+@Composable
+private fun AudioTimerSheet(
+    show: Boolean,
+    state: AudioPlayUiState,
+    onDismissRequest: () -> Unit,
+    onIntent: (AudioPlayIntent) -> Unit,
+) {
+    var timerPreview by remember(state.timerMinutes) {
+        mutableFloatStateOf(state.timerMinutes.toFloat())
+    }
+    AppModalBottomSheet(
+        show = show,
+        onDismissRequest = onDismissRequest,
+        title = stringResource(R.string.set_timer),
+    ) {
+        PlayerAdjustmentSlider(
+            title = stringResource(R.string.set_timer),
+            value = timerPreview.coerceIn(
+                PlaybackTimer.MIN_MINUTES.toFloat(),
+                PlaybackTimer.MAX_MINUTES.toFloat(),
+            ),
+            valueLabel = if (timerPreview == 0f) {
+                stringResource(R.string.close)
+            } else {
+                stringResource(R.string.timer_m, timerPreview.roundToInt())
+            },
+            startLabel = stringResource(R.string.close),
+            endLabel = stringResource(R.string.timer_m, PlaybackTimer.MAX_MINUTES),
+            onValueChange = { timerPreview = it.roundToInt().toFloat() },
+            onValueChangeFinished = {
+                onIntent(AudioPlayIntent.SetTimer(timerPreview.roundToInt()))
+            },
+            valueRange = PlaybackTimer.MIN_MINUTES.toFloat()..PlaybackTimer.MAX_MINUTES.toFloat(),
+            steps = PlaybackTimer.MAX_MINUTES - PlaybackTimer.MIN_MINUTES - 1,
+        )
+    }
+}
+
 private fun formatGain(gainMb: Int): String {
     val dB = gainMb / 1000f
     return if (dB == 0f) {
@@ -633,7 +828,6 @@ private fun formatGain(gainMb: Int): String {
 
 private const val AUDIO_SPEED_MIN = 0.5f
 private const val AUDIO_SPEED_MAX = 5.0f
-
 
 @Composable
 private fun AudioCoverPage(
@@ -647,19 +841,35 @@ private fun AudioCoverPage(
             .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        val coverShape = when (state.coverRatio) {
+            CoverRatio.Circle -> CircleShape
+            else -> RoundedCornerShape(8.dp)
+        }
         Box(
             modifier = Modifier.fillMaxWidth(),
             contentAlignment = Alignment.TopCenter,
         ) {
+            val coverModifier = when (state.coverRatio) {
+                // 边长取 0.8×宽 与 0.55×高 的较小值：既放大封面，又保证下方文字始终有空间
+                CoverRatio.Square, CoverRatio.Circle ->
+                    Modifier.aspectRatio(1f)
+
+                CoverRatio.Book ->
+                    Modifier
+                        .fillMaxWidth(0.64f)
+                        .aspectRatio(5f / 7f)
+
+                else ->
+                    Modifier.fillMaxSize(0.64f)
+            }
             BookCoverImage(
                 name = state.bookName,
                 author = state.author,
                 path = state.coverPath,
                 sourceOrigin = state.sourceOrigin,
                 modifier = Modifier
-                    .fillMaxWidth(0.64f)
-                    .aspectRatio(5f / 7f)
-                    .clip(RoundedCornerShape(8.dp))
+                    .then(coverModifier)
+                    .clip(coverShape)
             )
         }
         Column(
@@ -678,7 +888,6 @@ private fun AudioCoverPage(
             )
             AppText(
                 text = state.chapterTitle,
-                modifier = Modifier.padding(top = 16.dp),
                 style = LegadoTheme.typography.titleMediumEmphasized,
                 color = LegadoTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,
@@ -701,11 +910,6 @@ private fun formatAudioTime(valueMs: Int): String {
         String.format(Locale.ROOT, "%02d:%02d", minutes, seconds)
     }
 }
-
-private enum class AudioAdjustment { Speed, Timer }
-
-private fun AudioAdjustment?.toggle(value: AudioAdjustment): AudioAdjustment? =
-    if (this == value) null else value
 
 @Composable
 private fun playModeContentDescription(mode: AudioPlay.PlayMode): String = when (mode) {

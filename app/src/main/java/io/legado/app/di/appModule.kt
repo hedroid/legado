@@ -186,6 +186,7 @@ import io.legado.app.domain.usecase.ExportBookshelfUseCase
 import io.legado.app.domain.usecase.GenerateBookshelfAutoGroupPlanUseCase
 import io.legado.app.domain.usecase.GenerateChapterSummaryUseCase
 import io.legado.app.domain.usecase.GetChapterContentUseCase
+import io.legado.app.domain.usecase.CheckBookContentQualityUseCase
 import io.legado.app.domain.usecase.GetReadingProgressUseCase
 import io.legado.app.domain.usecase.HomeDashboardUseCase
 import io.legado.app.domain.usecase.IdentifyBookCharactersUseCase
@@ -231,7 +232,6 @@ import io.legado.app.ui.book.bookmark.AllBookmarkViewModel
 import io.legado.app.ui.book.cache.manage.BookCacheManageViewModel
 import io.legado.app.ui.book.changecover.ChangeCoverViewModel
 import io.legado.app.ui.book.changesource.ChangeBookSourceComposeViewModel
-import io.legado.app.ui.book.changesource.ChangeBookSourceViewModel
 import io.legado.app.ui.book.changesource.ChangeChapterSourceViewModel
 import io.legado.app.ui.book.explore.ExploreShowViewModel
 import io.legado.app.ui.book.group.GroupViewModel
@@ -251,6 +251,7 @@ import io.legado.app.ui.book.knowledge.BookKnowledgeListViewModel
 import io.legado.app.ui.book.manage.BookshelfManageScreenViewModel
 import io.legado.app.ui.book.manga.MangaReaderViewModel
 import io.legado.app.ui.book.read.ReadBookViewModel
+import io.legado.app.ui.book.read.ReaderSessionViewModel
 import io.legado.app.ui.book.readRecord.ReadRecordOverviewViewModel
 import io.legado.app.ui.book.readRecord.ReadRecordViewModel
 import io.legado.app.ui.book.readaloud.cache.TtsCacheViewModel
@@ -288,6 +289,7 @@ import io.legado.app.ui.config.translation.TranslationConfigViewModel
 import io.legado.app.ui.dict.DictViewModel
 import io.legado.app.ui.dict.rule.DictRuleViewModel
 import io.legado.app.ui.highlightTagRule.HighlightTagRuleViewModel
+import io.legado.app.feature.onboarding.OnboardingViewModel
 import io.legado.app.ui.login.SourceLoginViewModel
 import io.legado.app.ui.main.MainRouteSearchContent
 import io.legado.app.ui.main.MainViewModel
@@ -494,6 +496,7 @@ val appModule = module {
     singleOf(::SearchBooksUseCase)
     singleOf(::ChangeSourceSearchUseCase)
     singleOf(::GetChapterContentUseCase)
+    singleOf(::CheckBookContentQualityUseCase)
     singleOf(::AiToolAwareGenerationUseCase)
     singleOf(::AiTaskManager)
     singleOf(::IdentifyBookCharactersUseCase)
@@ -586,6 +589,7 @@ val appModule = module {
     viewModelOf(::DownloadCacheConfigViewModel)
     viewModelOf(::ThemeConfigViewModel)
     viewModelOf(::ThemeManageViewModel)
+    viewModelOf(::OnboardingViewModel)
     viewModelOf(::BackupConfigViewModel)
     viewModelOf(::LabConfigViewModel)
     viewModelOf(::TranslationConfigViewModel)
@@ -706,6 +710,7 @@ val appModule = module {
         )
     }
     viewModelOf(::MangaReaderViewModel)
+    viewModelOf(::ReaderSessionViewModel)
     viewModel {
         ReadBookViewModel(
             application = get(),
@@ -750,7 +755,6 @@ val appModule = module {
     }
     viewModelOf(::ChangeCoverViewModel)
     viewModelOf(::ChangeBookSourceComposeViewModel)
-    viewModelOf(::ChangeBookSourceViewModel)
     viewModelOf(::ChangeChapterSourceViewModel)
     viewModelOf(::ExploreViewModel)
     viewModelOf(::RssViewModel)
@@ -770,7 +774,8 @@ val appModule = module {
             changeBookSourceUseCase = get(),
             clearBookCacheUseCase = get(),
             deleteBooksUseCase = get(),
-            updateBooksGroupUseCase = get()
+            updateBooksGroupUseCase = get(),
+            downloadCacheSettingsGateway = get()
         )
     }
 

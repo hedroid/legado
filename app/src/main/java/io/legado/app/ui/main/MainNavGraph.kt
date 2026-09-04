@@ -50,7 +50,7 @@ import io.legado.app.ui.book.audio.AudioPlayIntent
 import io.legado.app.ui.book.audio.AudioPlayScreenContent
 import io.legado.app.ui.book.audio.AudioPlayViewModel
 import io.legado.app.ui.book.cache.manage.BookCacheManageRouteScreen
-import io.legado.app.ui.book.changesource.ChangeBookSourceDialog
+import io.legado.app.ui.widget.components.changeSource.ChangeSourceSheet
 import io.legado.app.ui.book.explore.ExploreShowIntent
 import io.legado.app.ui.book.explore.ExploreShowRouteScreen
 import io.legado.app.ui.book.explore.ExploreShowViewModel
@@ -84,6 +84,7 @@ import io.legado.app.ui.book.read.ReadBookInitRequest
 import io.legado.app.ui.book.read.ReadBookIntent
 import io.legado.app.ui.book.read.ReadBookRouteScreen
 import io.legado.app.ui.book.read.ReadBookViewModel
+import io.legado.app.ui.book.read.ReaderSessionViewModel
 import io.legado.app.ui.book.readRecord.ReadRecordOverviewRouteScreen
 import io.legado.app.ui.book.readRecord.ReadRecordRouteScreen
 import io.legado.app.ui.book.readaloud.cache.TtsCacheRouteScreen
@@ -194,6 +195,12 @@ fun MainActivity.mainEntryProvider(
     entry<MainRouteSourceLogin>(
         metadata = ModalOverlaySceneStrategy.modalOverlay(),
     ) { route ->
+        DisposableEffect(route) {
+            MainActivity.hasActiveSourceLoginRoute = true
+            onDispose {
+                MainActivity.hasActiveSourceLoginRoute = false
+            }
+        }
         val viewModel = koinViewModel<SourceLoginViewModel>(
             key = "SourceLogin:${route.type}:${route.sourceKey}:${route.bookUrl}",
         )
@@ -328,13 +335,18 @@ fun MainActivity.mainEntryProvider(
             onNavigateToBookCacheManage = {
                 onNavigateToRoute(MainRouteBookCacheManage)
             },
-            onOpenBookshelfBook = { book ->
+            onOpenBookshelfBook = { book, sharedCoverKey ->
                 if (book.isAudio) {
                     this@mainEntryProvider.startActivityForBook(book)
                 } else if (!book.isLocal && book.isImage && showMangaUi) {
                     onNavigateToRoute(MainRouteReadManga(bookUrl = book.bookUrl))
                 } else {
-                    onNavigateToRoute(MainRouteReadBook(bookUrl = book.bookUrl))
+                    onNavigateToRoute(
+                        MainRouteReadBook(
+                            bookUrl = book.bookUrl,
+                            sharedCoverKey = sharedCoverKey,
+                        )
+                    )
                 }
             },
             onNavigateToBackupSettings = {
@@ -586,18 +598,39 @@ fun MainActivity.mainEntryProvider(
         )
     }
 
-    entry<MainRouteReadBook> { route ->
+    entry<MainRouteReadBook>(
+        metadata = NavDisplay.transitionSpec {
+            fadeIn(animationSpec = tween(600)) togetherWith
+                fadeOut(animationSpec = tween(600))
+        } + NavDisplay.popTransitionSpec {
+            fadeIn(animationSpec = tween(600)) togetherWith
+                fadeOut(animationSpec = tween(600))
+        } + NavDisplay.predictivePopTransitionSpec { _ ->
+            if (configuration.appShell.predictiveBackEnabled) {
+                fadeIn(animationSpec = tween(600)) togetherWith
+                    fadeOut(animationSpec = tween(600))
+            } else {
+                null
+            }
+        }
+    ) { route ->
         val readBookViewModel = koinViewModel<ReadBookViewModel>(
             key = "ReadBook:${route.bookUrl ?: "last-read"}"
         )
-        val controller = remember(readBookViewModel) {
-            ReadBookController(this@mainEntryProvider, readBookViewModel)
+        val readerSessionViewModel = koinViewModel<ReaderSessionViewModel>(
+            key = "ReaderSession:${route.bookUrl ?: "last-read"}"
+        )
+        val controller = remember(readBookViewModel, readerSessionViewModel) {
+            ReadBookController(
+                this@mainEntryProvider,
+                readBookViewModel,
+                readerSessionViewModel,
+            )
         }
-        // ReadView 在首次组合时就会画一帧, 必须在它之前告诉 ViewModel 本路由要打开哪本书。
+        // Canvas 阅读面在首次组合时就会请求分页，必须先告诉 ViewModel 本路由要打开哪本书。
         // 刻意用 remember 而非 LaunchedEffect：后者在组合之后才跑，赶不上首帧。
         @Suppress("RememberReturnType")
         remember(readBookViewModel, route) {
-            readBookViewModel.prepareCachedChapterFallback(route.bookUrl, route.chapterChanged)
         }
         val lifecycleOwner = LocalLifecycleOwner.current
         val initRequest = remember(route) {
@@ -626,8 +659,12 @@ fun MainActivity.mainEntryProvider(
 
         ReadBookRouteScreen(
             viewModel = readBookViewModel,
+            readerSessionViewModel = readerSessionViewModel,
             host = controller,
             controller = controller,
+            sharedTransitionScope = sharedTransitionScope,
+            animatedVisibilityScope = LocalNavAnimatedContentScope.current,
+            sharedCoverKey = route.sharedCoverKey,
             onEffectsReady = { effectsReady.complete(Unit) },
             onOpenSearch = { word, bookUrl, autoFocus ->
                 onNavigateToRoute(
@@ -690,8 +727,8 @@ fun MainActivity.mainEntryProvider(
         LaunchedEffect(route, readBookViewModel, lifecycleOwner) {
             effectsReady.await()
             collectorReady[0] = true
-            readBookViewModel.initReadBookConfig(initRequest)
-            readBookViewModel.initData(initRequest) {
+            val initialBook = readBookViewModel.initReadBookConfig(initRequest)
+            readBookViewModel.initData(initRequest, initialBook) {
                 readBookViewModel.markJustInitData()
                 controller.onRouteInitialized()
                 if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
@@ -735,6 +772,7 @@ fun MainActivity.mainEntryProvider(
         )
         val lifecycleOwner = LocalLifecycleOwner.current
         val uiState by audioPlayViewModel.uiState.collectAsStateWithLifecycle()
+        var showAudioChangeSource by remember { mutableStateOf(false) }
         val imageLoader: ImageLoader = koinInject()
         val sourceEditResult = rememberLauncherForActivityResult(
             ActivityResultContracts.StartActivityForResult()
@@ -794,9 +832,7 @@ fun MainActivity.mainEntryProvider(
         LaunchedEffect(audioPlayViewModel) {
             audioPlayViewModel.effects.collectLatest { effect ->
                 when (effect) {
-                    is AudioPlayEffect.OpenChangeSource -> showDialogFragment(
-                        ChangeBookSourceDialog(effect.bookName, effect.author)
-                    )
+                    is AudioPlayEffect.OpenChangeSource -> showAudioChangeSource = true
 
                     is AudioPlayEffect.OpenLogin -> startActivity(
                         MainActivity.createSourceLoginIntent(
@@ -847,6 +883,20 @@ fun MainActivity.mainEntryProvider(
                 state = uiState,
                 onIntent = audioPlayViewModel::onIntent,
                 onBack = { audioPlayViewModel.onIntent(AudioPlayIntent.BackPressed) },
+            )
+        }
+        val audioBook = AudioPlay.book
+        if (showAudioChangeSource && audioBook != null) {
+            ChangeSourceSheet(
+                show = true,
+                oldBook = audioBook,
+                onDismissRequest = { showAudioChangeSource = false },
+                onReplace = { source, book, toc, _ ->
+                    audioPlayViewModel.changeTo(source, book, toc)
+                },
+                onAddAsNew = { book, toc ->
+                    audioPlayViewModel.addToBookshelf(book, toc)
+                },
             )
         }
     }
@@ -948,10 +998,10 @@ fun MainActivity.mainEntryProvider(
             openUrl = route.openUrl,
             startPage = route.startPage,
             onBackClick = { onNavigateBack() },
-            onOpenArticles = { sortUrl ->
+            onOpenArticles = { sortUrl, targetOrigin ->
                 onNavigateToRoute(
                     MainRouteRssSort(
-                        sourceUrl = route.origin,
+                        sourceUrl = targetOrigin ?: route.origin,
                         sortUrl = sortUrl
                     )
                 )
@@ -1086,6 +1136,7 @@ fun MainActivity.mainEntryProvider(
                         bookUrl = bookUrl,
                         inBookshelf = inBookshelf,
                         chapterChanged = chapterChanged,
+                        sharedCoverKey = route.sharedCoverKey ?: bookCoverSharedElementKey(route.bookUrl),
                     )
                 )
             },

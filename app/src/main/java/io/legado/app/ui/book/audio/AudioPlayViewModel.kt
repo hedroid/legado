@@ -8,6 +8,7 @@ import com.jeremyliao.liveeventbus.LiveEventBus
 import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.BookType
+import io.legado.app.constant.CoverRatio
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.constant.ReadAloudBgMode
@@ -26,6 +27,8 @@ import io.legado.app.help.config.compatDsInt
 import io.legado.app.model.AudioPlay
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.postEvent
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -52,13 +55,25 @@ class AudioPlayViewModel(
     val uiState = combine(
         coordinator.state,
         AppConfigStore.observeInt(PreferKey.audioPlayBgMode),
+        AppConfigStore.observeInt(PreferKey.audioPlayCoverRatio),
         activeSheet,
-    ) { source, bgMode, sheet ->
-        toUiState(source, bgMode ?: ReadAloudBgMode.Blur, sheet)
+    ) { source, bgMode, coverRatio, sheet ->
+        toUiState(
+            source,
+            bgMode ?: ReadAloudBgMode.Blur,
+            coverRatio ?: CoverRatio.Unrestricted,
+            sheet,
+        )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = toUiState(coordinator.snapshot(), readBgMode(), null),
+        initialValue = toUiState(
+            coordinator.snapshot(),
+            readBgMode(),
+            AppConfigStore.preferences.compatDsInt(PreferKey.audioPlayCoverRatio)
+                ?: CoverRatio.Unrestricted,
+            null,
+        ),
     )
 
     private val _effects = MutableSharedFlow<AudioPlayEffect>(extraBufferCapacity = 8)
@@ -100,6 +115,11 @@ class AudioPlayViewModel(
         coordinator.setLoading(loading)
     }
 
+    /** [AudioPlay] 的歌词回调不携带 UI 状态，重新快照即可读取最新歌词。 */
+    fun onLyricChanged() {
+        coordinator.refresh()
+    }
+
     fun onIntent(intent: AudioPlayIntent) {
         when (intent) {
             is AudioPlayIntent.Init -> init(intent.bookUrl, intent.inBookshelf)
@@ -117,6 +137,8 @@ class AudioPlayViewModel(
             is AudioPlayIntent.SetCloseCredits -> coordinator.setCloseCredits(intent.seconds)
             is AudioPlayIntent.SetAudioGain -> coordinator.setAudioGain(intent.gainMb)
             AudioPlayIntent.CycleBgMode -> cycleBgMode()
+            is AudioPlayIntent.SetCoverRatio ->
+                AppConfigStore.putInt(PreferKey.audioPlayCoverRatio, intent.value)
             is AudioPlayIntent.OpenSheet -> activeSheet.value = intent.sheet
             AudioPlayIntent.DismissSheet -> activeSheet.value = null
             AudioPlayIntent.ChangeSource -> {
@@ -271,6 +293,7 @@ class AudioPlayViewModel(
     private fun toUiState(
         source: AudioPlaySourceState,
         bgMode: Int,
+        coverRatio: Int,
         sheet: AudioPlaySheet?,
     ): AudioPlayUiState = AudioPlayUiState(
         bookUrl = source.bookUrl,
@@ -281,6 +304,7 @@ class AudioPlayViewModel(
         chapterIndex = source.chapterIndex,
         chapterTitle = source.chapterTitle,
         chapters = source.chapters,
+        lyricLines = parseAudioLyrics(source.lyric),
         status = source.status,
         isLoading = source.isLoading,
         position = source.position,
@@ -289,6 +313,7 @@ class AudioPlayViewModel(
         timerMinutes = source.timerMinutes,
         playMode = source.playMode,
         bgMode = bgMode,
+        coverRatio = coverRatio,
         canLogin = source.canLogin,
         wakeLockEnabled = source.wakeLockEnabled,
         mediaControlEnabled = source.mediaControlEnabled,
@@ -303,4 +328,28 @@ class AudioPlayViewModel(
     private fun effect(value: AudioPlayEffect) {
         _effects.tryEmit(value)
     }
+}
+
+private val lyricTimestampPattern = Regex("\\[(\\d{1,3}):(\\d{2})(?:[.:](\\d{1,3}))?]")
+
+private fun parseAudioLyrics(lyric: String?): kotlinx.collections.immutable.ImmutableList<AudioLyricLine> {
+    if (lyric.isNullOrBlank()) return persistentListOf()
+    return lyric.lineSequence().flatMap { line ->
+        val matches = lyricTimestampPattern.findAll(line).toList()
+        val text = line.substring(matches.lastOrNull()?.range?.last?.plus(1) ?: 0).trim()
+        matches.asSequence().mapNotNull { match ->
+            text.takeIf { it.isNotEmpty() }?.let {
+                val minutes = match.groupValues[1].toIntOrNull() ?: return@let null
+                val seconds = match.groupValues[2].toIntOrNull() ?: return@let null
+                val fraction = match.groupValues[3]
+                val millis = when (fraction.length) {
+                    0 -> 0
+                    1 -> fraction.toInt() * 100
+                    2 -> fraction.toInt() * 10
+                    else -> fraction.take(3).toInt()
+                }
+                AudioLyricLine((minutes * 60 + seconds) * 1_000 + millis, it)
+            }
+        }
+    }.sortedBy(AudioLyricLine::timestampMs).toImmutableList()
 }

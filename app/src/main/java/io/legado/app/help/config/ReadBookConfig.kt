@@ -11,7 +11,6 @@ import io.legado.app.data.entities.HighlightRule
 import io.legado.app.data.repository.ReadStyleConfigStore
 import io.legado.app.domain.gateway.ReadSettingsGateway
 import io.legado.app.model.ReadSessionState
-import io.legado.app.ui.config.readConfig.ReadConfig
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.hexString
@@ -76,6 +75,8 @@ object ReadBookConfig {
     val useZhLayout get() = readSettings.useZhLayout
     val readMenuIconShowText get() = readSettings.readMenuIconShowText
     val showMenuIcon get() = readSettings.showMenuIcon
+    val readingAnchorEnabled get() = readSettings.readingAnchorEnabled
+    val readAloudDetachReminderEnabled get() = readSettings.readAloudDetachReminderEnabled
     val titleBarCompact get() = readSettings.titleBarCompact
     val readMenuFloatingBottomBar get() = readSettings.readMenuFloatingBottomBar
     val readMenuTopBarLiquidGlassButtons get() = readSettings.readMenuTopBarLiquidGlassButtons
@@ -152,7 +153,7 @@ object ReadBookConfig {
     val resolvedMenuBgColor: Int
         get() {
             val isNight = ReadStyleResolver.isNightTheme()
-            return when (ReadConfig.readBarStyle) {
+            return when (readSettings.readBarStyle) {
                 1 -> { // 跟随阅读背景
                     val background = ReadStyleResolver.currentBackground(durConfig)
                     if (background.type == 0) {

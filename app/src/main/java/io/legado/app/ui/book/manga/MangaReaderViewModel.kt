@@ -83,7 +83,11 @@ class MangaReaderViewModel(
         viewModelScope.launch {
             mangaSettingsGateway.settings.collect { settings ->
                 latestMangaSettings = settings
-                readerSession.execute(MangaSessionCommand.PrefetchCountChanged(settings.chapterPrefetchCount))
+                readerSession.execute(
+                    MangaSessionCommand.PrefetchCountChanged(
+                        if (settings.autoOfflineCache) settings.chapterPrefetchCount else 0,
+                    )
+                )
                 _uiState.update { state ->
                     state.copy(settings = readSettings(settings))
                 }
@@ -262,6 +266,7 @@ class MangaReaderViewModel(
                 intent.itemIndex,
                 intent.firstItemIndex,
                 intent.lastItemIndex,
+                intent.currentChapterVisible,
                 intent.navigationId,
             )
             is MangaReaderIntent.PagerScrollChanged -> {
@@ -442,7 +447,7 @@ class MangaReaderViewModel(
                 MangaChapterTransitionDirection.NEXT
             }
             val targetExists = targetChapterIndex in 0 until session.chapterCount
-            val targetName = session.book?.chapterTitles?.getOrNull(targetChapterIndex)
+            val targetName = session.book.chapterTitles.getOrNull(targetChapterIndex)
                 ?: appCtx.getString(
                     R.string.manga_reader_transition_chapter_number,
                     targetChapterIndex + 1,
@@ -595,12 +600,18 @@ class MangaReaderViewModel(
                     } else old.scrollRequest,
                 )
             }
-            if (positionChanged && pendingExplicitChapterIndex != session.chapterIndex) updateVisibleItem(
-                itemIndex = targetIndex,
-                firstItemIndex = targetIndex,
-                lastItemIndex = targetIndex,
-                navigationId = _uiState.value.navigationId,
-            )
+            if (positionChanged && pendingExplicitChapterIndex != session.chapterIndex) {
+                // The session already owns this restored page. Notify it for adjacent-chapter
+                // loading without pretending the LazyColumn has reached the target: doing the
+                // latter clears scrollRequest and lets its stale page-0 callback overwrite the
+                // persisted progress before the restoration scroll runs.
+                executeSession(
+                    MangaSessionCommand.VisiblePageChanged(
+                        session.chapterIndex,
+                        session.pageIndex,
+                    )
+                )
+            }
         }
     }
 
@@ -780,6 +791,9 @@ class MangaReaderViewModel(
             MangaReaderSettingKey.PRE_DOWNLOAD -> updateMangaPreference { it.copy(preDownloadNum = value) }
             MangaReaderSettingKey.CHAPTER_PREFETCH -> updateMangaPreference {
                 it.copy(chapterPrefetchCount = value)
+            }
+            MangaReaderSettingKey.AUTO_OFFLINE_CACHE -> updateMangaPreference {
+                it.copy(autoOfflineCache = enabled)
             }
             MangaReaderSettingKey.AUTO_READ_SPEED -> updateMangaPreference { it.copy(autoPageSpeed = value) }
             MangaReaderSettingKey.VOLUME_KEY_PAGE -> updateMangaPreference { it.copy(volumeKeyPage = enabled) }
@@ -1090,6 +1104,7 @@ class MangaReaderViewModel(
         itemIndex: Int,
         firstItemIndex: Int,
         lastItemIndex: Int,
+        currentChapterVisible: Boolean,
         navigationId: Long,
     ) {
         val state = _uiState.value
@@ -1106,9 +1121,11 @@ class MangaReaderViewModel(
             }
             return
         }
-        val requestedItem = state.scrollRequest?.itemIndex
-            ?.let(state.pages::getOrNull) as? MangaReaderItemUi.Page
-        if (requestedItem != null && item.chapterIndex != requestedItem.chapterIndex) return
+        val requestedItemIndex = state.scrollRequest?.itemIndex
+        // LazyColumn first reports its retained/pre-scroll viewport. During a restore that page is
+        // commonly page 0, and accepting it overwrites the persisted target before scrollToItem
+        // reaches it. Only the requested item may complete a pending programmatic navigation.
+        if (!acceptsMangaVisibleItem(requestedItemIndex, itemIndex)) return
         if (pendingExplicitChapterIndex != null &&
             item.chapterIndex != readerSession.state.value.chapterIndex
         ) return
@@ -1117,6 +1134,7 @@ class MangaReaderViewModel(
         when (mangaChapterSwitchDecision(
             currentChapterIndex = readerSession.state.value.chapterIndex,
             visibleChapterIndex = item.chapterIndex,
+            currentChapterVisible = currentChapterVisible,
         )) {
             MangaChapterSwitch.NEXT,
             MangaChapterSwitch.PREVIOUS -> executeSession(
@@ -1218,10 +1236,11 @@ class MangaReaderViewModel(
         disableScrollAnimation = settings.disableMangaScrollAnimation,
         disableCrossFade = settings.disableMangaCrossFade,
         disableClickScroll = settings.disableClickScroll,
-        longPressEnabled = settings.longClick,
-        preDownloadCount = settings.preDownloadNum,
+            longPressEnabled = settings.longClick,
+            preDownloadCount = settings.preDownloadNum,
             chapterPrefetchCount = settings.chapterPrefetchCount,
-        autoReadSpeed = settings.autoPageSpeed,
+            autoOfflineCache = settings.autoOfflineCache,
+            autoReadSpeed = settings.autoPageSpeed,
         volumeKeyPage = settings.volumeKeyPage,
         reverseVolumeKeyPage = settings.reverseVolumeKeyPage,
         hideMangaTitle = settings.hideTitle,
