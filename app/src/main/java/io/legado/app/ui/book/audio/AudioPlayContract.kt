@@ -1,6 +1,7 @@
 package io.legado.app.ui.book.audio
 
 import androidx.compose.runtime.Stable
+import io.legado.app.constant.CoverRatio
 import io.legado.app.constant.ReadAloudBgMode
 import io.legado.app.constant.Status
 import io.legado.app.model.AudioPlay
@@ -18,6 +19,7 @@ data class AudioPlayUiState(
     val chapterIndex: Int = 0,
     val chapterTitle: String = "",
     val chapters: ImmutableList<PlayerChapterUi> = persistentListOf(),
+    val lyricLines: ImmutableList<AudioLyricLine> = persistentListOf(),
     val status: Int = Status.STOP,
     val isLoading: Boolean = false,
     val position: Int = 0,
@@ -26,6 +28,7 @@ data class AudioPlayUiState(
     val timerMinutes: Int = 0,
     val playMode: AudioPlay.PlayMode = AudioPlay.PlayMode.LIST_END_STOP,
     val bgMode: Int = ReadAloudBgMode.Blur,
+    val coverRatio: Int = CoverRatio.Unrestricted,
     val canLogin: Boolean = false,
     val wakeLockEnabled: Boolean = false,
     val mediaControlEnabled: Boolean = false,
@@ -39,11 +42,20 @@ data class AudioPlayUiState(
     val isPlaying: Boolean get() = status == Status.PLAY
 }
 
+@Stable
+data class AudioLyricLine(
+    val timestampMs: Int,
+    val text: String,
+)
+
 /** 播放器内的设置弹窗（由 UiState 管理，避免分散在 Screen 本地状态）。 */
 sealed interface AudioPlaySheet {
     data object SkipCredits : AudioPlaySheet
     data object Gain : AudioPlaySheet
     data object Log : AudioPlaySheet
+    data object CoverRatioOptions : AudioPlaySheet
+    data object Speed : AudioPlaySheet
+    data object Timer : AudioPlaySheet
 }
 
 sealed interface AudioPlayIntent {
@@ -62,6 +74,7 @@ sealed interface AudioPlayIntent {
     data class SetCloseCredits(val seconds: Int) : AudioPlayIntent
     data class SetAudioGain(val gainMb: Int) : AudioPlayIntent
     data object CycleBgMode : AudioPlayIntent
+    data class SetCoverRatio(val value: Int) : AudioPlayIntent
     data class OpenSheet(val sheet: AudioPlaySheet) : AudioPlayIntent
     data object DismissSheet : AudioPlayIntent
     data object ChangeSource : AudioPlayIntent

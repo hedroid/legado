@@ -23,6 +23,48 @@ import kotlin.reflect.full.primaryConstructor
 class ReadBookDomainSplitBoundaryTest {
 
     @Test
+    fun `Compose reader must remain the only production body renderer`() {
+        listOf(
+            "ui/book/read/page/ReadView.kt",
+            "ui/book/read/page/PageView.kt",
+            "ui/book/read/page/ContentTextView.kt",
+            "ui/book/read/page/provider/TextChapterLayout.kt",
+        ).forEach { relativePath ->
+            assertTrue(
+                "$relativePath must not be restored after the Compose Canvas migration",
+                !mainSourcePath("io/legado/app/$relativePath").exists(),
+            )
+        }
+        assertTrue(
+            "view_book_page.xml must not be restored after the Compose Canvas migration",
+            !projectPath("app/src/main/res/layout/view_book_page.xml").exists(),
+        )
+    }
+
+    @Test
+    fun `Canvas runtime must not recreate View page layout`() {
+        val runtimeFiles = listOf(
+            "model/ReadBook.kt",
+            "ui/book/read/ReadBookController.kt",
+            "ui/book/readaloud/player/ReadAloudPlayerCoordinator.kt",
+            "service/BaseReadAloudService.kt",
+            "service/TTSReadAloudService.kt",
+            "service/HttpReadAloudService.kt",
+        )
+        runtimeFiles.forEach { path ->
+            val source = mainSourceFile("io/legado/app/$path").readText()
+            listOf(
+                "import io.legado.app.ui.book.read.page.provider.ChapterProvider",
+                "import io.legado.app.ui.book.read.page.entities.TextChapter",
+                "getTextChapterAsync(",
+                "ReadBook.curTextChapter",
+            ).forEach { legacyDependency ->
+                assertTrue("$path still depends on $legacyDependency", legacyDependency !in source)
+            }
+        }
+    }
+
+    @Test
     fun `已摘出的域状态不再挂在 ReadBookUiState 上`() {
         val readBookFields = constructorParameterNames(ReadBookUiState::class)
         DOMAINS.forEach { domain ->
@@ -137,16 +179,30 @@ class ReadBookDomainSplitBoundaryTest {
      * 合并自 PR #2024。朗读域早已是 `ReadAloudDelegate`——留在 VM 的只有两条 `when`
      * 分支转发，各两行（分支 + 转发），与上方 `SetReadAloudSystemMediaCompat` 等兄弟
      * 分支同款，逐行都摘不掉：意图入口只能在 VM。
+     *
+     * 2668 → 2674：合并 PR #2089（阅读锚点）。新增 6 行全部是纯接线，逻辑在
+     * `ReadBook`（模型层）与 `ReadAloudDelegate`，逐行都摘不掉：
+     *
+     * - 阅读锚点：`OpenChapter`/`OpenChapterResult`/`SeekToChapter` 三个意图分支前置
+     *   `saveReadingAnchorBeforeChapterJump()`、`RestoreLastBookProgress`/`KeepCurrentBookProgress`
+     *   恢复/丢弃锚点并 `syncFromReadBook` 刷新锚点可用状态、`syncFromReadBook` 投影
+     *   `readingAnchorAvailable`——锚点状态与跳转计数住在 `ReadBook`，UiState 与
+     *   `_uiState.update` 只有 VM 能碰，意图入口与状态投影只能在 VM。
+     * - 朗读域：`ReadAloudFromHere` 意图分支一行转发 `ReadBook.readAloud()`、
+     *   `BackToSpeakingPosition` 转发 `ReadAloudDelegate.backToSpeakingPosition()`、
+     *   会话快照投影 `readAloudFollow`——与既有朗读分支同款。
+     * - `backToSpeakingPosition()` 本体（恢复跟随 + 跳章/跳字符）已下沉到
+     *   `ReadAloudDelegate`，未占本线额度。
      */
     @Test
-    fun `ReadBookViewModel 不超过 R2 验收的 2668 行`() {
+    fun `ReadBookViewModel 不超过 R2 验收的 2674 行`() {
         val lineCount = mainSourceFile("io/legado/app/ui/book/read/ReadBookViewModel.kt")
             .readLines().size
         assertTrue(
-            "ReadBookViewModel 涨到了 $lineCount 行，超过 R2 验收线 2668。\n" +
+            "ReadBookViewModel 涨到了 $lineCount 行，超过 R2 验收线 2674。\n" +
                 "新功能请摘成 io/legado/app/ui/book/read/ 下的 XxxDelegate，" +
                 "并在本测试的 DOMAINS 里加一条边界。",
-            lineCount <= 2668,
+            lineCount <= 2674,
         )
     }
 
@@ -250,7 +306,7 @@ class ReadBookDomainSplitBoundaryTest {
                 stateFields = setOf("contentProcessConfig"),
                 stateTypes = listOf("ContentProcessConfigUiState", "ContentProcessItemUi"),
             ),
-            // 开书域无自持状态：isInitFinish 是 ReadView 首帧的放行门闩，必须留在 UiState
+            // 开书域无自持状态：isInitFinish 是 Canvas 首帧的放行门闩，必须留在 UiState
             DomainSplit(
                 name = "开书/换源",
                 delegateFile = "io/legado/app/ui/book/read/ReadBookLoadDelegate.kt",
@@ -375,15 +431,30 @@ class ReadBookDomainSplitBoundaryTest {
         )
 
         fun mainSourceFile(relativePath: String): File {
+            val candidate = mainSourcePath(relativePath)
+            if (candidate.isFile) return candidate
+            error("从 ${File("").absolutePath} 向上找不到 $relativePath")
+        }
+
+        fun mainSourcePath(relativePath: String): File = locateProjectPath(
+            candidates = listOf("src/main/java/$relativePath", "app/src/main/java/$relativePath"),
+        )
+
+        fun projectPath(relativePath: String): File = locateProjectPath(
+            candidates = listOf(relativePath, relativePath.removePrefix("app/")),
+        )
+
+        private fun locateProjectPath(candidates: List<String>): File {
             var directory: File? = File("").absoluteFile
             while (directory != null) {
-                for (prefix in listOf("src/main/java", "app/src/main/java")) {
-                    val candidate = File(directory, "$prefix/$relativePath")
-                    if (candidate.isFile) return candidate
+                candidates.forEach { relativePath ->
+                    val candidate = File(directory, relativePath)
+                    if (candidate.exists()) return candidate
                 }
+                if (File(directory, ".git").exists()) return File(directory, candidates.first())
                 directory = directory.parentFile
             }
-            error("从 ${File("").absolutePath} 向上找不到 $relativePath")
+            return File(candidates.first())
         }
     }
 }
