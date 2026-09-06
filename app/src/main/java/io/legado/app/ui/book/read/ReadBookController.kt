@@ -612,6 +612,7 @@ class ReadBookController(
                 // resolves these compact dynamic ranges while drawing.
                 searchStart = selection?.anchor?.takeIf { pageHasSearchSelection },
                 searchEndInclusive = selection?.focus?.takeIf { pageHasSearchSelection },
+                searchIsTitle = selection?.anchorIsTitle == true,
                 readAloudParagraphIndex = aloudParagraphIndex.takeIf { pageHasAloudParagraph },
                 revision = decorated.revision xor (selection?.hashCode()?.toLong() ?: 0L) xor
                         (aloudPosition?.hashCode()?.toLong() ?: 0L),
@@ -666,10 +667,17 @@ class ReadBookController(
             chapterCount = ReadBook.simulatedChapterSize,
         )
         if (missingChapters.isEmpty()) return index
+        val cachedChapterIndexes = listOfNotNull(
+            ReadBook.readerChapterInputWindow.previous,
+            ReadBook.readerChapterInputWindow.current,
+            ReadBook.readerChapterInputWindow.next,
+        ).mapTo(mutableSetOf()) { it.chapter.index }
         val updated = pages.toMutableList()
         var added = 0
         missingChapters.forEach { chapterIndex ->
-            placeholderReaderPage(chapterIndex)?.let {
+            // Match the View reader's three-chapter hand-off: cached chapter content waits for
+            // its Canvas pagination rather than being presented as a network/content load.
+            if (chapterIndex !in cachedChapterIndexes) placeholderReaderPage(chapterIndex)?.let {
                 updated.add(it)
                 added++
             }
@@ -723,8 +731,11 @@ class ReadBookController(
     ) {
         val result = navigation.result
         val query = result.query.ifBlank { viewModel.uiState.value.searchContentQuery }
-        // 选区锚点、updateReadingPosition、locate 都以 semanticContent 为字符空间，
-        // 检索仓库的 queryIndexInChapter 在含标题/图片章节会偏移，交由 matcher 校验失败后按 occurrence 回退
+        // Full-text search uses the exact document “display title + newline + body” when the
+        // title is enabled. Resolve in that document, then map to title/body Canvas coordinates.
+        val searchTitle = input.displayTitle.takeIf {
+            ReadBookConfig.titleMode != 2 || input.chapter.isVolume || input.content.textList.isEmpty()
+        }
         val match = ReaderSearchMatcher.find(
             content = input.source.semanticContent,
             query = query,
@@ -734,6 +745,7 @@ class ReadBookController(
                 occurrence = result.resultCountWithinChapter,
                 isRegex = result.isRegex,
             ),
+            title = searchTitle,
         ) ?: run {
             pendingSearchNavigation = null
             return
@@ -743,13 +755,15 @@ class ReadBookController(
             chapterIndex = result.chapterIndex,
             anchor = match.start,
             focus = match.start + match.length - 1,
+            anchorIsTitle = match.isTitle,
         )
-        ReadBook.updateReadingPosition(match.start)
+        val bodyPosition = if (match.isTitle) 0 else match.start
+        ReadBook.updateReadingPosition(bodyPosition)
         directReaderPages.takeIf { pages ->
             pages.any { it.id.chapterIndex == result.chapterIndex }
         }?.let { pages ->
             publishDirectReaderWindow(
-                ReaderPageNavigator.locate(pages, result.chapterIndex, match.start)
+                ReaderPageNavigator.locate(pages, result.chapterIndex, bodyPosition)
             )
         }
     }
@@ -848,6 +862,21 @@ class ReadBookController(
             publishDirectReaderWindow(index)
             return true
         }
+        // A neighboring chapter may already have a complete page set from the preceding
+        // window. Publish it immediately while the new three-chapter batch is shaped; the
+        // View reader keeps that warm page visible instead of flashing a loading surface on a
+        // normal cached chapter turn. A later batch still replaces it if its identity changed.
+        directReaderPages
+            .takeIf { pages -> pages.any { it.id.chapterIndex == chapter.chapter.index && !it.isPlaceholder } }
+            ?.let { pages ->
+                publishDirectReaderWindow(
+                    ReaderPageNavigator.locate(
+                        pages,
+                        chapter.chapter.index,
+                        ReadBook.durChapterPos,
+                    )
+                )
+            }
         if (directReaderLayoutKey != key) {
             val paginationGeneration = ReadBook.readerPaginationGeneration
             directReaderLayoutJob?.cancel()
@@ -1666,7 +1695,9 @@ class ReadBookController(
                     // 避免挂起导航在用户之后主动进入同一章时劫持阅读位置
                     ReadBook.openChapter(
                         result.chapterIndex,
-                        result.queryIndexInChapter.coerceAtLeast(0),
+                        // Search offsets may include a title prefix. The body offset is resolved
+                        // after the cached chapter input has been published.
+                        0,
                     ) {
                         pendingSearchNavigation = null
                     }
@@ -2026,6 +2057,34 @@ class ReadBookController(
             ReadBook.moveToPrevChapter(upContent = false, toLast = true, upContentInPlace = false)
         }
         if (!moved) return null
+        // moveToNext/PrevChapter promotes a warm ReaderChapterInput without asking the
+        // renderer to redraw. When its Canvas pages are already cached, use them directly.
+        // Previously this path always appended a placeholder, causing a visible "loading"
+        // flash even though the next/previous chapter could be rendered immediately.
+        directReaderPages
+            .indexOfFirst { page ->
+                page.id.chapterIndex == targetChapterIndex && !page.isPlaceholder
+            }
+            .takeIf { it >= 0 }
+            ?.let {
+                val targetIndex = ReaderPageNavigator.locate(
+                    directReaderPages,
+                    targetChapterIndex,
+                    ReadBook.durChapterPos,
+                )
+                directReaderPageIndex = targetIndex
+                val window = publishDirectReaderWindow(targetIndex)
+                pageChanged = true
+                viewModel.startBackupJob()
+                return window
+            }
+        // ReadBook has promoted a cached adjacent chapter input, but its Canvas pages may still
+        // be shaping in the background. Start that pagination and retain the completed source
+        // page until it publishes; only an actually missing chapter gets a “loading” page.
+        if (ReadBook.readerChapterInputWindow.current?.chapter?.index == targetChapterIndex) {
+            publishReaderPageWindow()
+            return null
+        }
         val placeholder = placeholderReaderPage(targetChapterIndex) ?: return null
         val pages = directReaderPages.toMutableList()
         pages.add(placeholder)
