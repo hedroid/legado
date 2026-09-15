@@ -5,16 +5,17 @@ import io.legado.app.data.entities.HighlightRule
 import io.legado.app.domain.model.BookContentProcessEngine
 import io.legado.app.domain.model.TextProcessAnchor
 import io.legado.app.domain.model.TextProcessStyle
-import io.legado.app.feature.reader.core.model.ReaderUnderline
 import io.legado.app.feature.reader.core.model.ReaderTextBackgroundImage
+import io.legado.app.feature.reader.core.model.ReaderUnderline
 import io.legado.app.feature.reader.core.model.withBitmapSize
-import io.legado.app.feature.reader.platform.ReaderTextBackgroundLoader
 import io.legado.app.feature.reader.core.source.ReaderChapterInlineSource
 import io.legado.app.feature.reader.core.source.ReaderChapterSource
 import io.legado.app.feature.reader.core.source.ReaderChapterSourceBlock
 import io.legado.app.feature.reader.core.style.ReaderCharacterStyle
 import io.legado.app.feature.reader.core.style.ReaderStyleRange
 import io.legado.app.feature.reader.core.style.ReaderStyleTarget
+import io.legado.app.feature.reader.platform.ReaderTextBackgroundLoader
+import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.utils.GSON
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.fromJsonObject
@@ -104,7 +105,10 @@ object LegacyReaderStyleRangeMapper {
         underline = underlineMode.takeIf { it != 0 }?.let {
             ReaderUnderline(
                 mode = it,
-                colorArgb = underlineColor ?: textColor ?: 0xFF63C37D.toInt(),
+                // 兜底跟随正文色：旧 `TextLine.drawStyledUnderlines` 的
+                // `underlineColor ?: textColor ?: ChapterProvider.renderStyle.textColor`
+                // （即 ReadBookConfig.textColor），不是写死的主题绿。
+                colorArgb = underlineColor ?: textColor ?: ReadBookConfig.textColor,
                 widthPx = underlineWidth.dpToPx(),
                 offsetPx = underlineOffset.dpToPx(),
                 svgPath = underlineSvgPath.orEmpty(),
@@ -116,18 +120,25 @@ object LegacyReaderStyleRangeMapper {
             )
         },
         fontPath = fontPath,
-        fontWeight = fontWeight,
+        // 400 is the persisted/default "regular" value from the View reader, where an empty
+        // font override left the body Paint untouched.  Passing it as an explicit override in
+        // the new renderer reset bold/light body text to regular.  Keep it unset so the body
+        // style remains the source of truth; non-default weights still override it.
+        fontWeight = fontWeight.takeIf { it != 400 },
         italic = isItalic,
         fontSizeOffsetPx = fontSizeOffset.toFloat().spToPx(),
         backgroundImage = bgImage?.takeIf(String::isNotBlank)?.let {
+            val automatic = if (manualNineSlice) null else {
+                ReaderTextBackgroundLoader.nineSliceFractions(it)
+            }
             ReaderTextBackgroundImage(
                 source = it,
                 fit = bgImageFit,
                 scale = bgImageScale,
-                ninePatchLeft = npLeft,
-                ninePatchRight = npRight,
-                ninePatchTop = npTop,
-                ninePatchBottom = npBottom,
+                ninePatchLeft = automatic?.left ?: npLeft,
+                ninePatchRight = automatic?.right ?: npRight,
+                ninePatchTop = automatic?.top ?: npTop,
+                ninePatchBottom = automatic?.bottom ?: npBottom,
             ).let { image ->
                 val (width, height) = backgroundImageSize(it)
                 image.withBitmapSize(width, height)
@@ -141,7 +152,10 @@ object LegacyReaderStyleRangeMapper {
         underline = underlineMode.takeIf { it != 0 }?.let {
             ReaderUnderline(
                 mode = it,
-                colorArgb = underlineColor ?: textColor ?: 0xFF63C37D.toInt(),
+                // 兜底跟随正文色：旧 `TextLine.drawStyledUnderlines` 的
+                // `underlineColor ?: textColor ?: ChapterProvider.renderStyle.textColor`
+                // （即 ReadBookConfig.textColor），不是写死的主题绿。
+                colorArgb = underlineColor ?: textColor ?: ReadBookConfig.textColor,
                 widthPx = underlineWidth.dpToPx(),
                 offsetPx = underlineOffset.dpToPx(),
                 svgPath = underlineSvgPath.orEmpty(),

@@ -1,6 +1,10 @@
 package io.legado.app.feature.reader.core.selection
 
-import io.legado.app.feature.reader.core.model.*
+import io.legado.app.feature.reader.core.model.ReaderElement
+import io.legado.app.feature.reader.core.model.ReaderPage
+import io.legado.app.feature.reader.core.model.ReaderPageId
+import io.legado.app.feature.reader.core.model.ReaderRect
+import io.legado.app.feature.reader.core.model.ReaderTextStyle
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -90,6 +94,27 @@ class ReaderSelectionTest {
         val selection = ReaderSelectionPolicy.startWord(paragraphs, 5f, 40f, Locale.ENGLISH)!!
 
         assertEquals("word", selection.selectedText(paragraphs))
+    }
+
+    @Test
+    fun longPressSnapsAcrossLetterSpacingGaps() {
+        val spaced = page.copy(
+            elements = listOf(
+                ReaderElement.Text(
+                    ReaderRect(0f, 0f, 10f, 20f), 15f, "甲", style, false, false,
+                    chapterPosition = 0,
+                ),
+                ReaderElement.Text(
+                    ReaderRect(14f, 0f, 24f, 20f), 15f, "乙", style, false, false,
+                    chapterPosition = 1,
+                ),
+            )
+        )
+
+        val selection = ReaderSelectionPolicy.startWord(spaced, 12f, 10f, Locale.CHINESE)
+
+        assertEquals(0, selection?.anchor)
+        assertEquals("甲乙", selection?.selectedText(spaced))
     }
 
     @Test fun handlesKeepSemanticStartWhenSelectionIsReversed() {
@@ -189,5 +214,43 @@ class ReaderSelectionTest {
         )
 
         assertEquals("甲乙丙", ReaderSelection(0, 0, 2).selectedText(listOf(second, first)))
+    }
+
+    /**
+     * 滚动模式视口里堆叠的下邻页属于下一章（旧 View 的选区分词同样遍历 relativePage 0..2，
+     * 而 `TextPageFactory.nextPlusPage` 在章末给出下一章首页），因此选区必须能跨过去，
+     * 且两页都要参与高亮绘制。
+     */
+    @Test
+    fun scrollModeSelectionExtendsIntoTheNextChapterPage() {
+        val nextChapter = page.copy(
+            id = ReaderPageId(1, 0),
+            elements = listOf(
+                ReaderElement.Text(
+                    ReaderRect(0f, 0f, 10f, 20f), 15f, "丁", style, false, false,
+                    chapterPosition = 0,
+                ),
+            ),
+        )
+        val started = ReaderSelectionPolicy.start(page, 25f, 10f)!!
+        val extended = ReaderSelectionPolicy.extend(
+            started, nextChapter, 5f, 10f, allowChapterCrossing = true,
+        )
+
+        assertEquals(0, extended.startChapterIndex)
+        assertEquals(1, extended.endChapterIndex)
+        assertEquals(1, extended.focusChapterIndex)
+        assertEquals("丙\n丁", extended.selectedText(listOf(nextChapter, page)))
+        assertEquals(1, extended.bounds(page).size)
+        assertEquals(1, extended.bounds(nextChapter).size)
+    }
+
+    @Test
+    fun pagedModeKeepsTheSelectionInsideOneChapter() {
+        val nextChapter = page.copy(id = ReaderPageId(1, 0))
+        val started = ReaderSelectionPolicy.start(page, 25f, 10f)!!
+
+        assertEquals(started, ReaderSelectionPolicy.extend(started, nextChapter, 5f, 10f))
+        assertEquals(0, started.endChapterIndex)
     }
 }

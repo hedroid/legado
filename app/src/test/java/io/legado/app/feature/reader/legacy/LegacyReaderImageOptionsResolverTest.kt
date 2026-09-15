@@ -7,7 +7,8 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class LegacyReaderImageOptionsResolverTest {
-    @Test fun parsesTypedImageUrlOptions() {
+    @Test
+    fun parsesTypedImageUrlOptions() {
         val options = LegacyReaderImageOptionsResolver.resolve(
             "https://example/image, {\"style\":\"right\",\"width\":\"37.5%\",\"click\":\"open(\\\"x\\\")\"}",
         )!!
@@ -17,7 +18,8 @@ class LegacyReaderImageOptionsResolverTest {
         assertEquals("open(\"x\")", options.action)
     }
 
-    @Test fun parsesAbsoluteWidthAndKnownModesCaseInsensitively() {
+    @Test
+    fun parsesAbsoluteWidthAndKnownModesCaseInsensitively() {
         val options = LegacyReaderImageOptionsResolver.resolve("x,{\"style\":\"full\",\"width\":\"123\"}")!!
         assertEquals(ReaderImageLayoutMode.FULL_WIDTH, options.layoutMode)
         assertEquals(123f, options.requestedWidthPx!!, 0f)

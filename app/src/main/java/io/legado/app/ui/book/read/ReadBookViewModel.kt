@@ -80,6 +80,7 @@ import io.legado.app.model.translation.TranslationManager
 import io.legado.app.service.BaseReadAloudService
 import io.legado.app.ui.book.read.sheet.ReaderBookSheetTab
 import io.legado.app.ui.book.searchContent.SearchResult
+import io.legado.app.utils.GSON
 import io.legado.app.utils.ImageSaveUtils
 import io.legado.app.utils.NetworkUtils
 import io.legado.app.utils.isAbsUrl
@@ -103,6 +104,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private const val READER_SYNC_MIN_INTERVAL_MS = 250L
 
@@ -224,7 +226,7 @@ class ReadBookViewModel(
         saveMarkingUseCase = saveMarkingUseCase,
         host = object : MarkingDelegate.Host {
             override fun reloadCurrentChapter() {
-                contentProcessDelegate.reloadCurrentChapter()
+                contentProcessDelegate.reloadCurrentChapterPreservingSnapshot()
             }
 
             override fun dismissMarkingSheet() {
@@ -1107,8 +1109,8 @@ class ReadBookViewModel(
                 ReadBook.book?.setImageStyle(intent.style)
                 if (intent.style == Book.imgStyleSingle) {
                     ReadBook.book?.setPageAnim(0)
-                    _effects.tryEmit(ReadBookEffect.MenuImageStyleChanged(intent.style))
                 }
+                _effects.tryEmit(ReadBookEffect.MenuImageStyleChanged(intent.style))
                 ReadBook.loadContent(false)
             }
 
@@ -1354,8 +1356,8 @@ class ReadBookViewModel(
                 readAloudDelegate.setTtsFollowSys(intent.value)
             is ReadBookIntent.SetReadAloudTtsSpeechRate ->
                 readAloudDelegate.setTtsSpeechRate(intent.value)
-            is ReadBookIntent.SetSpeechAnalysisMode ->
-                readAloudDelegate.setSpeechAnalysisMode(intent.value)
+            is ReadBookIntent.SetSpeechAnalysisMode -> readAloudDelegate.setSpeechAnalysisMode(intent.value)
+            is ReadBookIntent.SetSpeechAnalysisReasoningLevel -> readAloudDelegate.setSpeechAnalysisReasoningLevel(intent.value)
             is ReadBookIntent.SetUseMultiSpeaker ->
                 readAloudDelegate.setUseMultiSpeaker(intent.value)
             is ReadBookIntent.SetDefaultReadAloudInterface ->
@@ -1444,6 +1446,30 @@ class ReadBookViewModel(
                 markingDelegate.open(intent.selection)
                 _uiState.update { it.copy(activeSheet = ReadBookSheet.Marking) }
             }
+
+            is ReadBookIntent.OpenQuickMarking -> {
+                markingReturnSheet = null
+                markingDelegate.open(intent.selection, inlineMode = true)
+            }
+
+            is ReadBookIntent.OpenQuickMarkingEdit -> {
+                markingReturnSheet = null
+                markingDelegate.openForEdit(intent.id, inlineMode = true)
+            }
+
+            is ReadBookIntent.ApplyQuickMarking -> {
+                viewModelScope.launch {
+                    readSettingsRepository.update {
+                        it.copy(lastMarkingStyle = GSON.toJson(intent.style))
+                    }
+                }
+                markingDelegate.save(
+                    style = intent.style,
+                    note = intent.note ?: markingDelegate.uiState.value.editing?.note.orEmpty(),
+                )
+            }
+
+            ReadBookIntent.DismissQuickMarking -> markingDelegate.closeInlineSession()
 
             is ReadBookIntent.EditMarking -> {
                 // 从目录 Sheet 进入：记住原 sheet，保存/删除/取消后返回
@@ -2354,15 +2380,37 @@ class ReadBookViewModel(
     }
 
     fun refreshImage(src: String) {
-        execute {
-            ReadBook.book?.let { book ->
-                val vFile = BookHelp.getImage(book, src)
-                ImageProvider.bitmapLruCache.remove(vFile.absolutePath)
-                vFile.delete()
+        refreshImages(setOf(src))
+    }
+
+    /**
+     * Re-fetch the supplied inline images. Theme changes use this same path as the
+     * reader's explicit “refresh image” action so source-side JS is evaluated again.
+     */
+    fun refreshImages(sources: Set<String>) {
+        if (sources.isEmpty()) return
+        viewModelScope.launch {
+            val refreshed = refreshImageFiles(sources)
+            if (refreshed.isNotEmpty()) {
+                _effects.tryEmit(ReadBookEffect.InvalidateReaderImages(refreshed))
             }
-        }.onFinally {
-            _effects.tryEmit(ReadBookEffect.InvalidateReaderImage(src))
-            ReadBook.loadContent(false)
+        }
+    }
+
+    /** Performs the file-cache half of image refresh before a renderer redraws it. */
+    suspend fun refreshImageFiles(sources: Set<String>): Set<String> = withContext(IO) {
+        val book = ReadBook.book ?: return@withContext emptySet()
+        buildSet {
+            sources.forEach { source ->
+                val refreshed = runCatching {
+                    val vFile = BookHelp.getImage(book, source)
+                    ImageProvider.bitmapLruCache.remove(vFile.absolutePath)
+                    vFile.delete()
+                    ImageProvider.cacheImage(book, source, ReadBook.bookSource)
+                    vFile.isFile && vFile.length() > 0L
+                }.getOrDefault(false)
+                if (refreshed) add(source)
+            }
         }
     }
 

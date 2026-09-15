@@ -1,9 +1,9 @@
 package io.legado.app.feature.reader.core.layout
 
 import io.legado.app.feature.reader.core.model.ReaderTextStyle
+import io.legado.app.feature.reader.core.source.ReaderChapterInlineSource
 import io.legado.app.feature.reader.core.source.ReaderChapterSource
 import io.legado.app.feature.reader.core.source.ReaderChapterSourceBlock
-import io.legado.app.feature.reader.core.source.ReaderChapterInlineSource
 import io.legado.app.feature.reader.core.source.ReaderInlineSourceStyle
 import io.legado.app.feature.reader.core.style.ReaderCharacterStyle
 import io.legado.app.feature.reader.core.style.ReaderCharacterStyleResolver
@@ -63,6 +63,8 @@ data class ReaderChapterMeasureStyle(
     val titleAlignment: ReaderTextAlignment,
     val imagePageBreakBefore: Boolean = false,
     val imagePageBreakAfter: Boolean = false,
+    /** 单图样式：标题段排版结束后立即断页，让章标题独占一页（对齐旧 TextChapterLayout）。 */
+    val titlePageBreakAfter: Boolean = false,
     val bodyLineHeightPx: Float? = null,
     val bodyBaselineOffsetPx: Float? = null,
     val titleLineHeightPx: Float? = null,
@@ -184,21 +186,40 @@ class ReaderChapterBlockMeasurer(
                 when (item) {
                     is ReaderChapterInlineSource.Text -> {
                         val htmlStyle = baseStyle.merge(item.style)
-                        val initiallyShaped = ReaderParagraphFactory(shaper(htmlStyle))
-                            .create(item.value, htmlStyle, item.chapterPosition)
+                        val initiallyShaped = shaper(htmlStyle).shape(item.value)
                         var offset = 0
-                        initiallyShaped.clusters.forEach { cluster ->
+                        initiallyShaped.text.forEachIndexed { clusterIndex, cluster ->
                             val position = item.chapterPosition + offset
-                            val rangeStyle = ReaderCharacterStyleResolver.resolve(style.styleRanges, position, isTitle)
+                            val rangeStyle = style.styleRanges
+                                .takeIf(List<ReaderStyleRange>::isNotEmpty)
+                                ?.let {
+                                    ReaderCharacterStyleResolver.resolve(
+                                        it,
+                                        position,
+                                        isTitle
+                                    )
+                                }
                             val textStyle = htmlStyle.merge(rangeStyle)
                             val textShaper = shaper(textStyle)
-                            val width = textShaper.shape(cluster).widthsPx.firstOrNull() ?: 0f
+                            // The paragraph was already shaped with htmlStyle to obtain its
+                            // grapheme clusters. For the overwhelmingly common unstyled glyph,
+                            // reuse that width instead of shaping the same glyph a second time.
+                            val width = if (textStyle == htmlStyle) {
+                                initiallyShaped.widthsPx.getOrElse(clusterIndex) { 0f }
+                            } else {
+                                textShaper.shape(cluster).widthsPx.firstOrNull() ?: 0f
+                            }
                             // The paragraph already owns the base line box (including the special
                             // subtitle bounds). Style overrides and baseline-shift spans need
                             // per-glyph metrics so their visual extents can expand the shared line.
                             val hasBaselineShift = item.style.superscript || item.style.subscript
+                            // Highlight rules are paint-only except for an explicit size
+                            // offset.  Letting color/underline/typeface/weight matches change
+                            // the shared row metrics made line and paragraph spacing vary with
+                            // the text a rule happened to match.  HTML baseline shifts and a
+                            // requested size offset still need their own visual extents.
                             val lineMetrics = textShaper.fontLineMetrics.takeIf {
-                                textStyle != baseStyle || hasBaselineShift
+                                hasBaselineShift || rangeStyle?.fontSizeOffsetPx != 0f
                             }
                             val baselineShift = lineMetrics?.let { metrics ->
                                 (if (item.style.superscript) -metrics.ascentPx / 2f else 0f) +
@@ -254,6 +275,9 @@ class ReaderChapterBlockMeasurer(
                                 pageBreakAfter = mode == ReaderImageLayoutMode.SINGLE_PAGE,
                             )
                         } else {
+                            // 文字嵌入（行内图）：与 View 实现一致，图片作为段内占位参与行排版，
+                            // 只允许缩小到不超过当前行高（禁止放大到铺满整页文字区）。行高上限
+                            // 让紧随其后的内容保持与行内占位一致且稳定的几何。
                             val maxHeight = lineHeight ?: baseStyle.fontSizePx
                             val scale = minOf(1f, maxHeight / size.heightPx.coerceAtLeast(1f))
                             inline += ReaderMeasuredInlineItem.Image(
@@ -271,7 +295,7 @@ class ReaderChapterBlockMeasurer(
             flushInline(skipBlank = hasStandaloneImage)
             return null
         }
-        source.blocks.forEach { block ->
+        source.blocks.forEachIndexed { index, block ->
             when (block) {
                 is ReaderChapterSourceBlock.Text -> {
                     addStyledParagraph(
@@ -280,6 +304,14 @@ class ReaderChapterBlockMeasurer(
                         block.fontSizeScale,
                         block.isSubtitle,
                     )?.let { return it }
+                    // 旧 TextChapterLayout 在单图样式的标题段排版完（`durY += titleBottomSpacing`
+                    // 之后）直接 `prepareNextPageIfNeed()`——无参调用无条件结束当前页，于是标题
+                    // 独占一页、正文从下一页开始。标题分成多段时只在最后一段之后断页。
+                    if (block.isTitle && style.titlePageBreakAfter &&
+                        (source.blocks.getOrNull(index + 1) as? ReaderChapterSourceBlock.Text)?.isTitle != true
+                    ) {
+                        blocks += ReaderMeasuredBlock.PageBreak
+                    }
                 }
                 is ReaderChapterSourceBlock.Image -> {
                     val placeholderExtent = (style.bodyLineHeightPx ?: style.bodyStyle.fontSizePx)

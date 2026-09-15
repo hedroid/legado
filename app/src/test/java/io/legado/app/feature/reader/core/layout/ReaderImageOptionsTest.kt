@@ -37,7 +37,35 @@ class ReaderImageOptionsTest {
         assertTrue(result.blocks.single() is ReaderMeasuredBlock.InlineParagraph)
     }
 
-    @Test fun perImageFullModeOverridesTextModeAndFillsWidth() = runBlocking {
+    @Test
+    fun inlineImageStaysWithinParagraphLineNotTextArea() = runBlocking {
+        val result = measure(
+            ReaderImageOptions(ReaderImageLayoutMode.INLINE, action = "run()"),
+            baseStyle.copy(
+                imageLayoutMode = ReaderImageLayoutMode.INLINE,
+                imageAvailableWidthPx = 100f,
+            ),
+            ReaderImageDimensions(100f, 50f),
+        )
+        val paragraph = result.blocks.single() as ReaderMeasuredBlock.InlineParagraph
+        val image = paragraph.items.single() as ReaderMeasuredInlineItem.Image
+        // 文字嵌入图只受当前行高约束（10px 字号），不允许放大到铺满可视文字区。
+        assertEquals(20f, image.widthPx, 0f)
+        assertEquals(10f, image.heightPx, 0f)
+        assertEquals("run()", image.action)
+    }
+
+    @Test
+    fun requestedFractionAppliesWithinLineCap() = runBlocking {
+        val result = measure(ReaderImageOptions(requestedWidthFraction = .5f))
+        val paragraph = result.blocks.single() as ReaderMeasuredBlock.InlineParagraph
+        val image = paragraph.items.single() as ReaderMeasuredInlineItem.Image
+        assertEquals(20f, image.widthPx, 0f)
+        assertEquals(10f, image.heightPx, 0f)
+    }
+
+    @Test
+    fun perImageFullStyleOverridesGlobalInlineMode() = runBlocking {
         val result = measure(
             ReaderImageOptions(ReaderImageLayoutMode.FULL_WIDTH, action = "run()"),
             baseStyle.copy(imageLayoutMode = ReaderImageLayoutMode.INLINE),
@@ -51,14 +79,6 @@ class ReaderImageOptionsTest {
         assertEquals(100f, image.bounds.width, 0f)
         assertEquals(50f, image.bounds.height, 0f)
         assertEquals("run()", image.action)
-    }
-
-    @Test fun percentWidthParticipatesInSmallImageClassification() = runBlocking {
-        val result = measure(ReaderImageOptions(requestedWidthFraction = .5f))
-        val paragraph = result.blocks.single() as ReaderMeasuredBlock.InlineParagraph
-        val image = paragraph.items.single() as ReaderMeasuredInlineItem.Image
-        assertEquals(20f, image.widthPx, 0f)
-        assertEquals(10f, image.heightPx, 0f)
     }
 
     @Test fun rightAlignmentAndSinglePageOverridesReachPaginator() = runBlocking {

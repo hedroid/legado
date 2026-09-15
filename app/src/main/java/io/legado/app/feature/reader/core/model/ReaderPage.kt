@@ -38,7 +38,11 @@ data class ReaderTextBackgroundImage(
     val contentInsetRightPx: Float = 0f,
     val contentInsetTopPx: Float = 0f,
     val contentInsetBottomPx: Float = 0f,
-)
+) {
+    val hasNinePatchBorder: Boolean
+        get() = source.substringBefore('?').substringBefore('#')
+            .endsWith(".9.png", ignoreCase = true)
+}
 
 fun ReaderTextBackgroundImage.withBitmapWidth(widthPx: Int): ReaderTextBackgroundImage {
     return withBitmapSize(widthPx, 0)
@@ -46,11 +50,15 @@ fun ReaderTextBackgroundImage.withBitmapWidth(widthPx: Int): ReaderTextBackgroun
 
 fun ReaderTextBackgroundImage.withBitmapSize(widthPx: Int, heightPx: Int): ReaderTextBackgroundImage {
     if (fit != 3 || widthPx <= 0) return this
+    val borderPx = if (hasNinePatchBorder) 1 else 0
+    val contentWidthPx = (widthPx - borderPx * 2).coerceAtLeast(0)
+    val contentHeightPx = (heightPx - borderPx * 2).coerceAtLeast(0)
+    val fixedScale = scale.coerceIn(0.1f, 5f)
     return copy(
-        contentInsetLeftPx = (widthPx * ninePatchLeft.coerceIn(0f, 1f)).toInt().toFloat(),
-        contentInsetRightPx = (widthPx * ninePatchRight.coerceIn(0f, 1f)).toInt().toFloat(),
-        contentInsetTopPx = (heightPx.coerceAtLeast(0) * ninePatchTop.coerceIn(0f, 1f)).toInt().toFloat(),
-        contentInsetBottomPx = (heightPx.coerceAtLeast(0) * ninePatchBottom.coerceIn(0f, 1f)).toInt().toFloat(),
+        contentInsetLeftPx = contentWidthPx * ninePatchLeft.coerceIn(0f, 1f) * fixedScale,
+        contentInsetRightPx = contentWidthPx * ninePatchRight.coerceIn(0f, 1f) * fixedScale,
+        contentInsetTopPx = contentHeightPx * ninePatchTop.coerceIn(0f, 1f) * fixedScale,
+        contentInsetBottomPx = contentHeightPx * ninePatchBottom.coerceIn(0f, 1f) * fixedScale,
     )
 }
 
@@ -164,6 +172,13 @@ data class ReaderPage(
     val decoration: ReaderPageDecoration = ReaderPageDecoration(),
     val inlineImagesPreserveScrollLine: Boolean = true,
     val emphasisUnderlineStyle: ReaderEmphasisUnderline? = null,
+    /** Dynamic search range, kept separate from immutable layout elements for draw-cache reuse. */
+    val searchStart: Int? = null,
+    val searchEndInclusive: Int? = null,
+    /** Whether the dynamic search range is in the independent title coordinate space. */
+    val searchIsTitle: Boolean = false,
+    /** Dynamic read-aloud paragraph, likewise independent of the pagination layout. */
+    val readAloudParagraphIndex: Int? = null,
     /** 邻章未装载时预置的"加载中"占位页，分页批次落地后被同 id 真实页替换。 */
     val isPlaceholder: Boolean = false,
 ) {
@@ -186,7 +201,7 @@ data class ReaderPageWindow(
     val previous: ReaderPage? = null,
     val current: ReaderPage? = null,
     val next: ReaderPage? = null,
-    /** 下下页：不参与绘制，供滚动渲染层提前预热绘制数据（对照 shutiao 的四页流）。 */
+    /** 下下页：滚动视口可露出它；分页模式仅将其作为预热页（对照 shutiao 的四页流）。 */
     val nextPlus: ReaderPage? = null,
 )
 

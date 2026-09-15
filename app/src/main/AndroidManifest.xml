@@ -37,6 +37,10 @@
         android:supportsRtl="true"
         android:theme="@style/Base.AppTheme"
         tools:ignore="AllowBackup,GoogleAppIndexingWarning,UnusedAttribute">
+        <!-- Allows adb/Perfetto to inspect release-like reader startup without exposing it to apps. -->
+        <profileable
+            android:shell="true"
+            tools:targetApi="q" />
         <activity
             android:name=".ui.main.Launcher0"
             android:enabled="false"

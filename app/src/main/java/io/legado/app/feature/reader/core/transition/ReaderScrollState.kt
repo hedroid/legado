@@ -2,6 +2,8 @@ package io.legado.app.feature.reader.core.transition
 
 import io.legado.app.feature.reader.core.model.ReaderElement
 import io.legado.app.feature.reader.core.model.ReaderPage
+import io.legado.app.feature.reader.core.transition.ReaderScrollPolicy.apply
+import kotlin.math.abs
 
 enum class ReaderScrollCrossing { PREVIOUS, NEXT }
 
@@ -22,7 +24,7 @@ object ReaderScrollPolicy {
      * Click paging keeps one visible text row for context, matching ScrollPageDelegate.
      * Non-inline image pages and empty pages move by one full viewport.
      *
-     * "保留一行"的基准是三页合成可视内容（对照旧 getCurVisiblePage）：页底已露出下一页
+     * "保留一行"的基准是连续的相邻页合成内容（对照旧 getCurVisiblePage）：页底已露出下一页
      * 行、或页顶已露出上一页行时，目标行在邻页里，步距自然跨过页边界（跨页折算由
      * [apply] 在动画帧内完成），而不是停在当前页边缘。
      */
@@ -32,6 +34,7 @@ object ReaderScrollPolicy {
         direction: ReaderTurnDirection,
         previous: ReaderPage? = null,
         next: ReaderPage? = null,
+        nextPlus: ReaderPage? = null,
     ): Float {
         val viewport = (page.contentBottomPx - page.contentTopPx).coerceAtLeast(1f)
         data class Row(val element: ReaderElement, val stackOffset: Float)
@@ -46,7 +49,12 @@ object ReaderScrollPolicy {
             }
             previous?.let { collect(it, -it.scrollExtentPx) }
             collect(page, 0f)
-            next?.let { collect(it, page.scrollExtentPx) }
+            next?.let { nextPage ->
+                collect(nextPage, page.scrollExtentPx)
+                nextPlus?.let { following ->
+                    collect(following, page.scrollExtentPx + nextPage.scrollExtentPx)
+                }
+            }
         }
         val text = visible.filter { it.element is ReaderElement.Text }
         if (text.isEmpty() ||
@@ -61,6 +69,24 @@ object ReaderScrollPolicy {
         }.coerceIn(0f, viewport)
         val effective = distance.takeIf { it > 0f } ?: viewport
         return if (direction == ReaderTurnDirection.PREVIOUS) effective else -effective
+    }
+
+    /**
+     * 点击/按键滚动翻页的时长：对照旧 `PageDelegate.startScroll` 的
+     * `animationSpeed * |dy| / viewHeight`（`animationSpeed` 即
+     * `ReadView.defaultAnimationSpeed = 300`）。
+     *
+     * 时长随步距缩放，而不是固定帧数：旧版整屏步距（图片页）与"保留一行"步距（文本页，
+     * 约为一屏减一行）落在这条曲线的不同位置，固定 18 帧会把短步距拖成与整屏一样久。
+     */
+    fun stepDurationMillis(
+        distancePx: Float,
+        viewportExtentPx: Float,
+        animationSpeedMillis: Int = LEGACY_ANIMATION_SPEED_MILLIS,
+    ): Int {
+        if (viewportExtentPx <= 0f) return animationSpeedMillis
+        val scaled = animationSpeedMillis * abs(distancePx) / viewportExtentPx
+        return scaled.coerceIn(1f, Int.MAX_VALUE.toFloat()).toInt()
     }
 
     fun apply(
@@ -95,4 +121,7 @@ object ReaderScrollPolicy {
         }
         return ReaderScrollResult(next)
     }
+
+    /** 旧 `ReadView.defaultAnimationSpeed`：滚动与翻页动画的基准速度（ms / 一屏）。 */
+    private const val LEGACY_ANIMATION_SPEED_MILLIS = 300
 }

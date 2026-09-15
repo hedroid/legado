@@ -41,6 +41,35 @@ class ReaderLineSpacingTest {
         assertEquals(listOf(0f, 35f), page.elements.map { it.bounds.top })
     }
 
+    @Test
+    fun continuousScrollKeepsParagraphSpacingWhenItFallsAtAPageBoundary() {
+        val pages = ReaderPaginator.paginateBlocks(
+            listOf(inline("甲"), inline("乙")),
+            config.copy(continuousScroll = true, paragraphSpacingPx = 5f),
+        )
+
+        assertEquals(listOf("甲\n", "乙"), pages.map { it.text })
+        // The old View stacks the next TextPage after durY. That cursor includes the
+        // last line's advance (30px) and its paragraph gap (5px), not a whole viewport.
+        assertEquals(35f, pages.first().scrollExtentPx, 0f)
+    }
+
+    @Test
+    fun smallerInlineTextKeepsTheBodyLineBoxAndFollowingParagraphGap() {
+        val small = style.copy(fontSizePx = 10f)
+        val first = inline("甲", multiplier = 1.5f).copy(
+            items = listOf(ReaderMeasuredInlineItem.Text("甲", 10f, small, 0)),
+        )
+        val page = ReaderPaginator.paginateBlocks(
+            listOf(first, inline("乙")),
+            config.copy(viewportHeightPx = 100, paragraphSpacingPx = 5f),
+        ).single()
+
+        val text = page.elements.filterIsInstance<ReaderElement.Text>()
+        assertEquals(20f, text.first().bounds.height, 0f)
+        assertEquals(listOf(0f, 35f), text.map { it.bounds.top })
+    }
+
     @Test fun doubledFontAndInlineImageDetermineHeightBeforeSpacingMultiplier() {
         val paragraph = inline("甲乙").copy(items = listOf(
             ReaderMeasuredInlineItem.Text("甲", 20f, style.copy(fontSizePx = 40f), 0),

@@ -19,9 +19,11 @@ import io.legado.app.feature.reader.platform.AndroidReaderHtmlSourceResolver
 import io.legado.app.feature.reader.platform.AndroidReaderTextShaper
 import io.legado.app.feature.reader.platform.ReaderAndroidPaginationStyle
 import io.legado.app.feature.reader.platform.ReaderAndroidPaintFactory
+import io.legado.app.feature.reader.platform.ReaderPerfTrace
 import io.legado.app.help.book.BookContent
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.model.ImageProvider
+import io.legado.app.utils.dpToPx
 import kotlinx.coroutines.CancellationException
 import splitties.init.appCtx
 
@@ -161,7 +163,8 @@ object LegacyReaderChapterPaginator {
             ),
             imageOptionsResolver = LegacyReaderImageOptionsResolver,
         )
-        val measured = measurer.measure(
+        val measured = ReaderPerfTrace.section("pagination.measure") {
+            measurer.measure(
             layoutSource,
             ReaderChapterMeasureStyle(
                 bodyStyle = bodyStyle,
@@ -169,11 +172,14 @@ object LegacyReaderChapterPaginator {
                 bodyIndentCharacters = ReadBookConfig.paragraphIndent.length,
                 bodyIndentText = ReadBookConfig.paragraphIndent,
                 bodyAlignment = if (ReadBookConfig.textFullJustify) ReaderTextAlignment.JUSTIFY else ReaderTextAlignment.START,
+                // 旧 TextChapterLayout 让 `imgStyleSingle` 的章标题同样居中（水平，见
+                // `addCharsToLineNatural` 的 startX；垂直见 setTypeText 的 durY 分支）。
                 titleAlignment = if (ReadBookConfig.isMiddleTitle || chapter.isVolume ||
                     content.textList.isEmpty() || singleImage
                 ) ReaderTextAlignment.CENTER else ReaderTextAlignment.START,
                 imagePageBreakBefore = singleImage,
                 imagePageBreakAfter = singleImage,
+                titlePageBreakAfter = singleImage && content.textList.isNotEmpty(),
                 imageLayoutMode = imageLayoutMode,
                 imageAvailableWidthPx = (
                     viewportWidthPx / paginationStyle.columnCount(viewportWidthPx, viewportHeightPx) -
@@ -189,12 +195,14 @@ object LegacyReaderChapterPaginator {
                 letterSpacingEm = bodyPaint.letterSpacing,
                 styleRanges = styleRanges,
             ),
-        )
+            )
+        }
         if (measured is ReaderChapterMeasureResult.Unsupported) {
             return LegacyReaderChapterPaginationResult.Unsupported(measured.reason)
         }
         val blocks = (measured as ReaderChapterMeasureResult.Success).blocks
-        val pages = ReaderPaginator.paginateBlocks(
+        val pages = ReaderPerfTrace.section("pagination.pages") {
+            ReaderPaginator.paginateBlocks(
             blocks = blocks,
             config = ReaderPaginationConfig(
                 chapterIndex = chapter.index,
@@ -212,6 +220,8 @@ object LegacyReaderChapterPaginator {
                 baselineOffsetPx = paginationStyle.bodyBaselineOffsetPx,
                 lineSpacingMultiplier = paginationStyle.lineSpacingExtra,
                 continuousScroll = paginationStyle.isScroll,
+                singleImageStyle = singleImage,
+                chapterEndPaddingPx = CHAPTER_END_PADDING_DP.dpToPx(),
                 inlineImagesPreserveScrollLine = imageLayoutMode == ReaderImageLayoutMode.INLINE,
                 textBottomJustify = paginationStyle.textBottomJustify,
                 pageUnderline = paginationStyle.pageUnderline,
@@ -219,13 +229,17 @@ object LegacyReaderChapterPaginator {
                 paragraphSpacingPx = paginationStyle.bodyTextHeightPx * paginationStyle.paragraphSpacing / 10f,
                 titleTopSpacingPx = paginationStyle.titleTopSpacingPx,
                 titleBottomSpacingPx = paginationStyle.titleBottomSpacingPx,
-                titlePageCenterVertical = chapter.isVolume || content.textList.isEmpty(),
+                titlePageCenterVertical = chapter.isVolume || content.textList.isEmpty() || singleImage,
                 titleParagraphSpacingPx = paginationStyle.titleTextHeightPx * paginationStyle.paragraphSpacing / 10f,
                 titleSegmentSpacingPx = paginationStyle.titleTextHeightPx * paginationStyle.titleLineSpacingSub,
                 letterSpacingPx = bodyPaint.letterSpacing * bodyPaint.textSize,
                 revision = revision,
             ),
-        )
+            )
+        }
         return LegacyReaderChapterPaginationResult.Success(pages)
     }
 }
+
+/** 旧 `TextChapterLayout.setTypeText` 收尾时给章末页加的留白（20dp）。 */
+private const val CHAPTER_END_PADDING_DP = 20f

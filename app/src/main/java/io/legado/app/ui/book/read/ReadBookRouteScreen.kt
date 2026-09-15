@@ -10,8 +10,8 @@ import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewTreeObserver
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.animation.AnimatedVisibility
@@ -26,9 +26,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -39,9 +39,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -67,8 +68,8 @@ import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.BookType
 import io.legado.app.constant.ReadMenuBlurMode
-import io.legado.app.feature.reader.ReaderCanvasSurface
 import io.legado.app.feature.reader.ReaderBackgroundSurface
+import io.legado.app.feature.reader.ReaderCanvasSurface
 import io.legado.app.feature.reader.core.gesture.ReaderTapActionGrid
 import io.legado.app.feature.reader.core.model.readerBackgroundAlpha
 import io.legado.app.feature.reader.core.transition.ReaderTransitionMode
@@ -88,10 +89,10 @@ import io.legado.app.ui.main.AndroidPlatformCapabilities
 import io.legado.app.ui.main.MainActivity
 import io.legado.app.ui.replace.ReplaceEditRoute
 import io.legado.app.ui.replace.ReplaceRuleActivity
-import io.legado.app.ui.theme.LocalAppUiConfiguration
 import io.legado.app.ui.theme.LegadoTheme
-import io.legado.app.ui.widget.components.text.AppText
+import io.legado.app.ui.theme.LocalAppUiConfiguration
 import io.legado.app.ui.widget.components.image.cover.sharedCoverSourceRadius
+import io.legado.app.ui.widget.components.text.AppText
 import io.legado.app.utils.StartActivityContract
 import io.legado.app.utils.takePersistablePermissionSafely
 import io.legado.app.utils.toastOnUi
@@ -100,7 +101,6 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -156,6 +156,7 @@ fun ReadBookRouteScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val readPreferences by viewModel.readPreferences.collectAsStateWithLifecycle()
+    val markingState by viewModel.markingState.collectAsStateWithLifecycle()
     val readerRenderState by readerSessionViewModel.uiState.collectAsStateWithLifecycle()
     val readerPageWindow = readerRenderState.pageWindow
     val readerPaginationError = readerRenderState.paginationError
@@ -351,12 +352,13 @@ fun ReadBookRouteScreen(
 
     // ── Effect collection: route handles launcher effects, rest goes to bridge ──
 
-    LaunchedEffect(viewModel) {
-        launch {
+    LaunchedEffect(viewModel, lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             viewModel.effects
                 .onSubscription {
-                    effectsReady.complete(Unit)
-                    onEffectsReady()
+                    if (effectsReady.complete(Unit)) {
+                        onEffectsReady()
+                    }
                 }
                 .collect { effect ->
                     try {
@@ -587,14 +589,18 @@ fun ReadBookRouteScreen(
         }
     }
 
+    val fallbackReaderSurfaceColor = if (isDarkTheme) Color.Black else Color.White
     val readerSurfaceColor = Color(
-        readerBackground.meanColorArgb.takeIf { it != 0 } ?: runCatching {
-            android.graphics.Color.parseColor(
-                if (isDarkTheme) state.styleConfig.bgStrNight else state.styleConfig.bgStr
-            )
-        }.getOrDefault(
-            if (isDarkTheme) android.graphics.Color.BLACK else android.graphics.Color.WHITE
-        )
+        readerBackground.meanColorArgb.takeIf { it != 0 } ?: when {
+            // Before the route has a book, styleConfig only contains construction defaults.
+            // Keep the first opaque reader frame neutral instead of exposing an app-theme tint.
+            state.book == null -> fallbackReaderSurfaceColor.toArgb()
+            else -> runCatching {
+                android.graphics.Color.parseColor(
+                    if (isDarkTheme) state.styleConfig.bgStrNight else state.styleConfig.bgStr
+                )
+            }.getOrDefault(fallbackReaderSurfaceColor.toArgb())
+        }
     )
     val readerEntranceSettled = animatedVisibilityScope?.transition?.let { transition ->
         !transition.isRunning &&
@@ -605,7 +611,23 @@ fun ReadBookRouteScreen(
         controller.onReaderEntranceStateChanged(readerEntranceSettled)
         if (readerEntranceSettled) viewModel.onReaderEntranceSettled()
     }
-    val hasReadablePage = readerPageWindow.current != null && state.msg == null
+    // A chapter boundary can publish an empty window for one composition while the controller
+    // swaps a simulated-page turn to its cached/placeholder successor. Keeping the last complete
+    // window for that gap prevents the root reader background from becoming a visible fallback.
+    var lastReadablePageWindow by remember {
+        mutableStateOf<io.legado.app.feature.reader.core.model.ReaderPageWindow?>(
+            null
+        )
+    }
+    LaunchedEffect(readerPageWindow.current?.id, readerPageWindow.current?.layoutRevision) {
+        if (readerPageWindow.current != null) lastReadablePageWindow = readerPageWindow
+    }
+    val displayedReaderPageWindow =
+        readerPageWindow.takeIf { it.current != null } ?: lastReadablePageWindow
+    // A retained page bridges only a transient chapter-window gap. A real pagination failure
+    // must replace it with the retryable error state instead of leaving stale content visible.
+    val hasReadablePage = displayedReaderPageWindow?.current != null &&
+            state.msg == null && readerPaginationError == null
     var readerContentRevealAllowed by remember(sharedCoverKey) {
         mutableStateOf(sharedCoverKey == null || animatedVisibilityScope == null)
     }
@@ -656,13 +678,13 @@ fun ReadBookRouteScreen(
             Modifier
                 .fillMaxSize()
                 .onSizeChanged { size ->
-                controller.onComposeReaderViewportChanged(
-                    widthPx = size.width,
-                    heightPx = size.height,
-                    density = density,
-                    contentPadding = readerContentPadding,
-                )
-            }
+                    controller.onComposeReaderViewportChanged(
+                        widthPx = size.width,
+                        heightPx = size.height,
+                        density = density,
+                        contentPadding = readerContentPadding,
+                    )
+                }
         ) {
             ReaderBackgroundSurface(
                 backgroundImage = readerBackground.drawable,
@@ -676,13 +698,14 @@ fun ReadBookRouteScreen(
                 exit = fadeOut(animationSpec = tween(450)),
             ) {
                 ReaderCanvasSurface(
-                hostPages = readerPageWindow,
+                    hostPages = displayedReaderPageWindow ?: readerPageWindow,
                 transitionMode = ReaderTransitionMode.fromPageAnim(controller.pageAnim),
                 backgroundColor = readerSurfaceColor,
                 backgroundImage = readerBackground.drawable,
                 backgroundRevision = readerBackground.revision,
                 backgroundImageAlpha = readerBackgroundAlpha(state.styleConfig.bgAlpha),
                 selectionColor = LegadoTheme.colorScheme.primary.copy(alpha = 0.28f),
+                    selectionPreviewStyle = markingState.previewStyle,
                 textAccentColor = Color(state.sheetConfig.textAccentColor),
                 autoPageIndicatorColor = LegadoTheme.colorScheme.primary,
                 modifier = Modifier
@@ -697,6 +720,11 @@ fun ReadBookRouteScreen(
                     .layerBackdrop(menuBackdrop),
                 onPreviousPage = { controller.completeComposePageTurn(PageDirection.PREV) },
                 onNextPage = { controller.completeComposePageTurn(PageDirection.NEXT) },
+                    onPageBoundaryReached = controller::showComposePageBoundary,
+                    // 放行条件读取"书中是否还有邻章"（旧 View hasNextChapter/hasPrevChapter），
+                    // 而不是邻章当前是否已排版完成：两章交接期间排版批次可能还没落地。
+                    hasNextChapter = controller::hasNextComposeChapter,
+                    hasPreviousChapter = controller::hasPreviousComposeChapter,
                 onToggleMenu = controller::showComposeActionMenu,
                 onToggleBookmark = { viewModel.onIntent(ReadBookIntent.ToggleBookmark) },
                 swipeToBookmarkEnabled = readPreferences.swipeToAddBookmark,
@@ -731,18 +759,19 @@ fun ReadBookRouteScreen(
                 noAnimationScrollPage = readPreferences.noAnimScrollPage,
                 externalPageTurns = controller.composePageTurns,
                 externalSelectionCancels = controller.composeSelectionCancels,
+                    onVisibleBodyTextPositionProvider = controller::setComposeVisibleBodyTextPositionProvider,
                 )
             }
             AnimatedVisibility(
-                visible = readerEntranceSettled && !hasReadablePage,
+                // Generic "loading data" duplicated the Canvas placeholder and could flash
+                // before a warm cached chapter page was republished. The body renderer owns
+                // normal loading feedback; this outer layer is reserved for messages/errors.
+                visible = readerEntranceSettled && !hasReadablePage &&
+                        (state.msg != null || readerPaginationError != null),
                 enter = fadeIn(animationSpec = tween(300)),
                 exit = fadeOut(animationSpec = tween(300)),
             ) {
-                val message = state.msg ?: if (readerPaginationError != null) {
-                    stringResource(R.string.load_error_retry)
-                } else {
-                    stringResource(R.string.data_loading)
-                }
+                val message = state.msg ?: stringResource(R.string.load_error_retry)
                 val retryable = state.msg == null && readerPaginationError != null
                 val retryLabel = stringResource(R.string.dynamic_click_retry)
                 Box(
@@ -886,7 +915,10 @@ fun ReadBookRouteScreen(
             )
             ReaderTextSelectionOverlay(
                 controller = controller,
+                viewModel = viewModel,
                 expandTextMenu = readPreferences.expandTextMenu,
+                showSelectMenuIcon = readPreferences.showSelectMenuIcon,
+                lastMarkingStyle = readPreferences.lastMarkingStyle,
                 onOpenManage = { showSelectMenuConfigSheet = true },
             )
             var configItems by remember { mutableStateOf<List<ActionMenuItem>>(emptyList()) }
@@ -983,20 +1015,43 @@ private fun rememberReaderSharedClipRadiusDp(
 @Composable
 private fun ReaderTextSelectionOverlay(
     controller: ReadBookController,
+    viewModel: ReadBookViewModel,
     expandTextMenu: Boolean,
+    showSelectMenuIcon: Boolean,
+    lastMarkingStyle: String,
     onOpenManage: () -> Unit,
 ) {
     val textMenuState by controller.textMenuState.collectAsStateWithLifecycle()
-    TextActionSelectionMenu(
-        menuState = textMenuState,
-        expandTextMenu = expandTextMenu,
-        onDismiss = controller::dismissTextActionMenu,
-        onItemClick = controller::onTextMenuItemClick,
-        onOpenManage = {
-            controller.dismissTextActionMenu()
-            onOpenManage()
-        },
-    )
+    val markingState by viewModel.markingState.collectAsStateWithLifecycle()
+    val currentMenuState = textMenuState
+    if (markingState.inlineMode && currentMenuState != null) {
+        MarkingSelectionMenu(
+            menuState = currentMenuState,
+            state = markingState,
+            lastMarkingStyle = lastMarkingStyle,
+            onDismiss = controller::onMenuActionFinally,
+            onApply = { style, note ->
+                viewModel.onIntent(ReadBookIntent.ApplyQuickMarking(style, note))
+            },
+            onDelete = {
+                viewModel.onIntent(ReadBookIntent.DeleteMarking)
+                controller.onMenuActionFinally()
+            },
+        )
+    } else {
+        TextActionSelectionMenu(
+            menuState = textMenuState,
+            expandTextMenu = expandTextMenu,
+            showSelectMenuIcon = showSelectMenuIcon,
+            onDismiss = controller::dismissTextActionMenu,
+            onItemClick = controller::onTextMenuItemClick,
+            onOpenQuickMarking = controller::openQuickMarking,
+            onOpenManage = {
+                controller.dismissTextActionMenu()
+                onOpenManage()
+            },
+        )
+    }
 }
 
 

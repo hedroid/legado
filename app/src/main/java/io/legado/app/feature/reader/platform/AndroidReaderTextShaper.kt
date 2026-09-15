@@ -6,13 +6,14 @@ import android.os.Build
 import android.text.TextPaint
 import androidx.core.net.toUri
 import io.legado.app.feature.reader.core.layout.GlyphClusters
-import io.legado.app.feature.reader.core.layout.ReaderTextShaper
 import io.legado.app.feature.reader.core.layout.ReaderFontBounds
 import io.legado.app.feature.reader.core.layout.ReaderFontLineMetrics
+import io.legado.app.feature.reader.core.layout.ReaderTextShaper
 import io.legado.app.feature.reader.core.layout.clusterGlyphs
 import io.legado.app.feature.reader.core.model.ReaderTextStyle
-import java.io.File
+import io.legado.app.utils.validFontLeading
 import splitties.init.appCtx
+import java.io.File
 
 object ReaderAndroidPaintFactory {
     /** 进程级字体缓存：同一 path/weight/italic/family 只做一次磁盘读取与解析。 */
@@ -29,15 +30,20 @@ object ReaderAndroidPaintFactory {
             isStrikeThruText = style.strikeThrough
             isUnderlineText = style.nativeUnderline
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                setFontVariationSettings("'wght' ${style.fontWeight}")
+                // 对照旧 View `ChapterProvider`：只有显式字重（100..900，映射后落在
+                // bold/light 档位）才写 `wght`；`400` 在本仓库语义是"未设置/常规"
+                // （见 LegacyReaderStyleRangeMapper 的 400 约定），旧版此时完全不动
+                // Paint，强写 `wght 400` 会把字体自带的默认实例（如 500）改细。
+                style.fontWeight.takeIf { it != 400 }
+                    ?.let { setFontVariationSettings("'wght' $it") }
             }
             style.shadow?.let { setShadowLayer(it.radiusPx, it.dxPx, it.dyPx, it.colorArgb) }
         }
 
     fun createTextPaint(style: ReaderTextStyle): TextPaint = TextPaint(create(style))
 
-    /** The reader's line box uses descent - ascent + leading; baseline = line bottom - descent. */
-    fun baselineOffset(paint: Paint): Float = paint.fontMetrics.let { it.leading - it.ascent }
+    /** 行盒基线偏移：行高已排除异常 leading（见 PaintExtensions.validFontLeading）。 */
+    fun baselineOffset(paint: Paint): Float = paint.fontMetrics.let { paint.validFontLeading - it.ascent }
 
     fun loadTypeface(path: String, weight: Int, italic: Boolean, family: String = "sans-serif"): Typeface {
         val key = "$path|$weight|$italic|$family"
@@ -74,7 +80,9 @@ class AndroidReaderTextShaper(paint: TextPaint) : ReaderTextShaper {
     private val paint = TextPaint(paint).apply { letterSpacing = 0f }
     override val fontBounds = this.paint.fontMetrics.let { ReaderFontBounds(it.top, it.bottom, it.descent) }
     override val fontLineMetrics = this.paint.fontMetrics.let {
-        val height = it.descent - it.ascent + it.leading
+        // 行盒高度与 utils/PaintExtensions.textHeight 同规则：异常 leading 不计入
+        //（如方正新楷体声明 leading≈1em，原样计入会让行高翻倍、空隙全在字形上方）
+        val height = it.descent - it.ascent + this.paint.validFontLeading
         ReaderFontLineMetrics(
             heightPx = height,
             baselineOffsetPx = height - it.descent,
