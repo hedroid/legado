@@ -501,6 +501,44 @@ class ReaderPaginatorTest {
         assertEquals(frameBounds.right, glyphs[2].bounds.left, 0f)
     }
 
+    /** 放行标记按「绘制用实例」比较：同图连续才续接，换一张图就要断开。 */
+    @Test
+    fun backgroundRunContinuesOnlyAcrossEqualDrawnImages() {
+        val frame = ReaderTextBackgroundImage(
+            source = "frame.png",
+            fit = 3,
+            scale = 1f,
+            contentInsetLeftPx = 3f,
+            contentInsetRightPx = 4f,
+        )
+        val framed = style.copy(backgroundImage = frame)
+        val reframed = style.copy(backgroundImage = frame.copy(source = "other.png"))
+        val page = ReaderPaginator.paginateBlocks(
+            listOf(
+                ReaderMeasuredBlock.InlineParagraph(
+                    items = listOf(
+                        ReaderMeasuredInlineItem.Text("甲", 10f, style, 0),
+                        ReaderMeasuredInlineItem.Text("乙", 10f, framed, 1),
+                        ReaderMeasuredInlineItem.Text("丙", 10f, framed, 2),
+                        ReaderMeasuredInlineItem.Text("丁", 10f, reframed, 3),
+                        ReaderMeasuredInlineItem.Text("戊", 10f, reframed, 4),
+                    ),
+                    indentCharacters = 0,
+                    alignment = ReaderTextAlignment.START,
+                    lineHeightPx = 20f,
+                    baselineOffsetPx = 15f,
+                    baseTextSizePx = 10f,
+                )
+            ),
+            config.copy(viewportWidthPx = 200, viewportHeightPx = 100),
+        ).single()
+
+        assertEquals(
+            listOf(false, false, true, false, true),
+            page.elements.filterIsInstance<ReaderElement.Text>().map { it.continuesBackgroundRun },
+        )
+    }
+
     @Test
     fun nineSliceReflowDoesNotStrandTheRemainderOfAnOriginalLine() {
         val frame = ReaderTextBackgroundImage(
@@ -808,6 +846,39 @@ class ReaderPaginatorTest {
         val runs = page.textBackgroundRuns()
         assertEquals(1, runs.size)
         assertEquals(34f, runs.single().contentBounds.right, 0f)
+    }
+
+    /**
+     * 高亮规则命中的段落走富文本路径（逐 item 样式），背景图 fit=1（拉伸）/0（平铺）/2（裁剪）
+     * 不参与九宫格预算，但放行标记必须照发：默认字间距 0.1em 远大于 1px 的几何相邻阈值，
+     * 少发标记就会把一条连续气泡切成逐字绘制（issue #2286）。
+     */
+    @Test
+    fun stretchedBackgroundMergesAcrossLetterSpacingOnRichTextRow() {
+        val stretched = ReaderTextBackgroundImage("bubble.png", fit = 1, scale = 1f)
+        val stretchedStyle = style.copy(backgroundImage = stretched)
+        val page = ReaderPaginator.paginateBlocks(
+            listOf(
+                ReaderMeasuredBlock.InlineParagraph(
+                    items = (0 until 3).map { index ->
+                        ReaderMeasuredInlineItem.Text("字", 10f, stretchedStyle, index)
+                    },
+                    indentCharacters = 0,
+                    alignment = ReaderTextAlignment.START,
+                    lineHeightPx = 20f,
+                    baselineOffsetPx = 15f,
+                    baseTextSizePx = 10f,
+                )
+            ),
+            config.copy(viewportWidthPx = 100, viewportHeightPx = 100, letterSpacingPx = 5f),
+        ).single()
+
+        val glyphs = page.elements.filterIsInstance<ReaderElement.Text>()
+        // 字间距在每个字之间留下 5f 间隙，几何相邻判定必然失败。
+        assertEquals(listOf(0f, 15f, 30f), glyphs.map { it.bounds.left })
+        val run = page.textBackgroundRuns().single()
+        assertEquals(0f, run.contentBounds.left, 0f)
+        assertEquals(40f, run.contentBounds.right, 0f)
     }
 
     /**

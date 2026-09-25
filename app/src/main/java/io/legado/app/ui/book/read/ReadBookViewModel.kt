@@ -39,6 +39,7 @@ import io.legado.app.domain.gateway.OtherSettingsGateway
 import io.legado.app.domain.gateway.ReadStyleGateway
 import io.legado.app.domain.gateway.ThemeSettingsGateway
 import io.legado.app.domain.model.readaloud.ReadAloudSessionStatus
+import io.legado.app.domain.model.settings.ReadAloudTimerMode
 import io.legado.app.domain.usecase.AiTextFactoryUseCase
 import io.legado.app.domain.usecase.ChangeBookSourceUseCase
 import io.legado.app.domain.usecase.CleanSelectedTextUseCase
@@ -74,9 +75,7 @@ import io.legado.app.model.activeReadAloudProgress
 import io.legado.app.model.analyzeRule.AnalyzeRule
 import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setChapter
 import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
-import io.legado.app.model.translation.TranslationChapterKey
 import io.legado.app.model.translation.TranslationChapterStatus
-import io.legado.app.model.translation.TranslationManager
 import io.legado.app.service.BaseReadAloudService
 import io.legado.app.ui.book.read.sheet.ReaderBookSheetTab
 import io.legado.app.ui.book.searchContent.SearchResult
@@ -101,7 +100,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -225,12 +223,15 @@ class ReadBookViewModel(
         highlightRuleRepository = highlightRuleRepository,
         saveMarkingUseCase = saveMarkingUseCase,
         host = object : MarkingDelegate.Host {
-            override fun reloadCurrentChapter() {
-                contentProcessDelegate.reloadCurrentChapterPreservingSnapshot()
+            override val activeSheet: ReadBookSheet?
+                get() = _uiState.value.activeSheet
+
+            override fun setActiveSheet(sheet: ReadBookSheet?) {
+                _uiState.update { it.copy(activeSheet = sheet) }
             }
 
-            override fun dismissMarkingSheet() {
-                restoreMarkingReturnSheet()
+            override fun reloadCurrentChapter() {
+                contentProcessDelegate.reloadCurrentChapterPreservingSnapshot()
             }
 
             override fun showToast(message: String) {
@@ -240,17 +241,6 @@ class ReadBookViewModel(
     ) }
 
     val markingState get() = markingDelegate.uiState
-    /**
-     * 划线笔记编辑可能从目录 Sheet 进入：保存/删除/取消后应回到原 sheet（目录），
-     * 而不是被丢回阅读页。从划词菜单新建时无原 sheet，回 null。
-     */
-    private var markingReturnSheet: ReadBookSheet? = null
-
-    private fun restoreMarkingReturnSheet() {
-        val returnSheet = markingReturnSheet
-        markingReturnSheet = null
-        _uiState.update { it.copy(activeSheet = returnSheet) }
-    }
 
     // --- 跳转校验域：书签/笔记跳转前比对源与章节标题 ---
 
@@ -305,6 +295,13 @@ class ReadBookViewModel(
 
         override suspend fun listChapters(bookUrl: String): List<BookChapter> =
             bookRepository.getChapters(bookUrl)
+
+        override val translationStatus: TranslationChapterStatus
+            get() = _uiState.value.translationStatus
+
+        override fun updateTranslationStatus(status: TranslationChapterStatus) {
+            _uiState.update { it.copy(translationStatus = status) }
+        }
     }
 
     private val aiDelegate by lazy { ReadAiDelegate(
@@ -597,8 +594,6 @@ class ReadBookViewModel(
     val readPreferences = _readPreferences.asStateFlow()
 
     private var pendingBooksDirReloadChapterList: Boolean = false
-    private var translationStatusJob: Job? = null
-    private var observedTranslationKey: TranslationChapterKey? = null
     private var deferredReaderFeaturesStarted = false
 
     val isInitFinish: Boolean get() = _uiState.value.isInitFinish
@@ -1055,9 +1050,12 @@ class ReadBookViewModel(
             is ReadBookIntent.OpenContentEdit -> contentEditDelegate.open()
             is ReadBookIntent.LoadContentEdit -> contentEditDelegate.load()
             is ReadBookIntent.SaveContentEdit ->
-                contentEditDelegate.save(intent.content, intent.saveToSource)
+                contentEditDelegate.save(intent.content, intent.saveToSource, intent.chapterTitle)
             is ReadBookIntent.ResetContentEdit -> contentEditDelegate.reset()
             is ReadBookIntent.SetContentEditText -> contentEditDelegate.setText(intent.text)
+            is ReadBookIntent.SetContentEditTitle -> contentEditDelegate.setTitle(intent.title)
+            is ReadBookIntent.SetContentEditBodyOnly ->
+                contentEditDelegate.setBodyOnly(intent.enabled)
             is ReadBookIntent.SetContentEditSaveToSource ->
                 contentEditDelegate.setSaveToSource(intent.value)
             is ReadBookIntent.RefreshImage -> refreshImage(intent.src)
@@ -1247,6 +1245,7 @@ class ReadBookViewModel(
             is ReadBookIntent.UpdateHighlightRuleImportItem ->
                 highlightRuleDelegate.updateImportItem(intent.index, intent.rule)
             is ReadBookIntent.SaveImportedHighlightRules -> highlightRuleDelegate.saveImported()
+            is ReadBookIntent.ShowHighlightRulePresets -> highlightRuleDelegate.showPresets()
             is ReadBookIntent.ExportHighlightRules -> {
                 _effects.tryEmit(ReadBookEffect.OpenHighlightRuleExportPicker)
             }
@@ -1324,6 +1323,8 @@ class ReadBookViewModel(
             is ReadBookIntent.SetReadAloudPauseOnPhoneCall ->
                 readAloudDelegate.setPauseOnPhoneCall(intent.value)
             is ReadBookIntent.SetReadAloudWakeLock -> readAloudDelegate.setWakeLock(intent.value)
+            is ReadBookIntent.SetReadAloudKeepOnExit ->
+                readAloudDelegate.setKeepOnExit(intent.value)
             is ReadBookIntent.SetShowReadAloudCapsule ->
                 readAloudDelegate.setShowCapsule(intent.value)
             is ReadBookIntent.SetCapsuleAutoCollapse ->
@@ -1334,7 +1335,8 @@ class ReadBookViewModel(
                 readAloudDelegate.setCapsulePosition(intent.x, intent.y)
             is ReadBookIntent.SetReadAloudMediaButtonPerNext ->
                 readAloudDelegate.setMediaButtonPerNext(intent.value)
-            is ReadBookIntent.SetReadAloudByPage -> readAloudDelegate.setByPage(intent.value)
+            is ReadBookIntent.SetReadAloudContentSplitMode ->
+                readAloudDelegate.setContentSplitMode(intent.value)
             is ReadBookIntent.SetReadAloudSystemMediaCompat ->
                 readAloudDelegate.setSystemMediaCompat(intent.value)
             is ReadBookIntent.SetReadAloudAndroidMediaControl ->
@@ -1350,8 +1352,13 @@ class ReadBookViewModel(
             ReadBookIntent.BackToSpeakingPosition -> readAloudDelegate.backToSpeakingPosition()
             ReadBookIntent.ReadAloudFromHere -> ReadBook.readAloud()
             is ReadBookIntent.SetReadAloudTtsTimer -> readAloudDelegate.setTtsTimer(intent.value)
-            is ReadBookIntent.SetFinishCurrentChapterAfterTimer ->
-                readAloudDelegate.setFinishCurrentChapterAfterTimer(intent.value)
+            is ReadBookIntent.SetReadAloudTimerMode ->
+                readAloudDelegate.setTimerMode(ReadAloudTimerMode.fromStorage(intent.value))
+
+            is ReadBookIntent.SetReadAloudTimerChapters -> readAloudDelegate.setTimerChapters(intent.value)
+            is ReadBookIntent.SetFinishCurrentChapterAfterTimer -> readAloudDelegate.setFinishCurrentChapterAfterTimer(
+                intent.value
+            )
             is ReadBookIntent.SetReadAloudTtsFollowSys ->
                 readAloudDelegate.setTtsFollowSys(intent.value)
             is ReadBookIntent.SetReadAloudTtsSpeechRate ->
@@ -1440,22 +1447,11 @@ class ReadBookViewModel(
 
             is ReadBookIntent.TextActionBookmark -> bookmarkDelegate.openEditor(intent.bookmark)
 
-            is ReadBookIntent.OpenMarking -> {
-                // 从划词菜单新建：无原 sheet 可回
-                markingReturnSheet = null
-                markingDelegate.open(intent.selection)
-                _uiState.update { it.copy(activeSheet = ReadBookSheet.Marking) }
-            }
+            is ReadBookIntent.OpenMarking -> markingDelegate.openFromMenu(intent.selection)
 
-            is ReadBookIntent.OpenQuickMarking -> {
-                markingReturnSheet = null
-                markingDelegate.open(intent.selection, inlineMode = true)
-            }
+            is ReadBookIntent.OpenQuickMarking -> markingDelegate.openQuick(intent.selection)
 
-            is ReadBookIntent.OpenQuickMarkingEdit -> {
-                markingReturnSheet = null
-                markingDelegate.openForEdit(intent.id, inlineMode = true)
-            }
+            is ReadBookIntent.OpenQuickMarkingEdit -> markingDelegate.openQuickForEdit(intent.id)
 
             is ReadBookIntent.ApplyQuickMarking -> {
                 viewModelScope.launch {
@@ -1471,17 +1467,9 @@ class ReadBookViewModel(
 
             ReadBookIntent.DismissQuickMarking -> markingDelegate.closeInlineSession()
 
-            is ReadBookIntent.EditMarking -> {
-                // 从目录 Sheet 进入：记住原 sheet，保存/删除/取消后返回
-                markingReturnSheet = _uiState.value.activeSheet
-                markingDelegate.openForEdit(intent.id)
-                _uiState.update { it.copy(activeSheet = ReadBookSheet.Marking) }
-            }
+            is ReadBookIntent.EditMarking -> markingDelegate.openForEditFromSheet(intent.id)
 
-            is ReadBookIntent.DismissMarking -> {
-                markingDelegate.onSheetDismissed()
-                restoreMarkingReturnSheet()
-            }
+            ReadBookIntent.DismissMarking -> markingDelegate.dismissSheetByUser()
 
             is ReadBookIntent.SaveMarking -> {
                 markingDelegate.save(intent.style, intent.note)
@@ -1610,21 +1598,13 @@ class ReadBookViewModel(
             ReadBook.webBookProgress = null
         }
 
-        // View-layer operations via effects
-        _effects.tryEmit(ReadBookEffect.UpSystemUiVisibility)
-        _effects.tryEmit(ReadBookEffect.UpTime)
-        _effects.tryEmit(ReadBookEffect.UpScreenTimeOut)
-
-        // Activity-level operations
-        _effects.tryEmit(ReadBookEffect.RegisterTimeBatteryReceiver)
-        _effects.tryEmit(ReadBookEffect.RegisterNetworkListener)
+        // Reader window and listener lifecycle is handled synchronously by the route controller.
     }
 
     private var justInitData = false
 
     private fun handleOnPause() {
         backupJob?.cancel()
-        _effects.tryEmit(ReadBookEffect.StopAutoPage)
 
         // Read time tracking
         ReadBook.isUiActive = false
@@ -1635,20 +1615,12 @@ class ReadBookViewModel(
         }
         ReadBook.cancelPreDownloadTask()
 
-        // View-layer
-        _effects.tryEmit(ReadBookEffect.UpSystemUiVisibility)
-
-        // Activity-level operations
-        _effects.tryEmit(ReadBookEffect.UnregisterTimeBatteryReceiver)
-        _effects.tryEmit(ReadBookEffect.UnregisterNetworkListener)
-
         if (!BuildConfig.DEBUG) {
             if (backupSettingsGateway.currentSettings.syncBookProgressPlus) {
                 ReadBook.syncProgress()
             } else {
                 ReadBook.uploadProgress()
             }
-            _effects.tryEmit(ReadBookEffect.BackupNow)
         }
         justInitData = false
     }
@@ -1791,6 +1763,13 @@ class ReadBookViewModel(
             }
         }
         viewModelScope.launch {
+            // 听书播放界面的「经典控制」返回阅读界面时，直接落到经典朗读控制页。
+            // 播放界面盖上来后阅读器子树已销毁，只能靠这条通道把意图带回存活的 ViewModel。
+            ReadAloudControlsRequestBus.events.collect {
+                onIntent(ReadBookIntent.OpenClassicReadAloudControls)
+            }
+        }
+        viewModelScope.launch {
             var previousStatus: ReadAloudSessionStatus? = null
             readAloudSessionStore.state.collect { session ->
                 val status = session.status
@@ -1922,6 +1901,7 @@ class ReadBookViewModel(
             titleFont = config.titleFont,
             pageAnim = actualConfig.getPageAnim(),
             pageAnimEInk = actualConfig.getPageAnimEInk(),
+            pageAnimSpeed = actualConfig.getPageAnimSpeed(),
             shareLayout = config.shareLayout,
             menuBgColorDay = dur.menuBgColor(isNight = false),
             menuBgColorNight = dur.menuBgColor(isNight = true),
@@ -2021,7 +2001,7 @@ class ReadBookViewModel(
         val chapterInput = ReadBook.readerChapterInputWindow.current
         val canvasPage = composePagePosition
             ?.takeIf { it.chapterIndex == ReadBook.durChapterIndex }
-        val translationStatus = observeCurrentTranslation(book, ReadBook.durChapterIndex)
+        val translationStatus = aiDelegate.observeChapterTranslation(book, ReadBook.durChapterIndex)
         return current.copy(
             book = book,
             bookSource = ReadBook.bookSource,
@@ -2103,42 +2083,6 @@ class ReadBookViewModel(
                 titleBarCompact = ReadBookConfig.titleBarCompact,
             ),
         )
-    }
-
-    private fun observeCurrentTranslation(
-        book: Book?,
-        chapterIndex: Int,
-    ): TranslationChapterStatus {
-        val key = book
-            ?.takeIf { it.getTranslationMode() }
-            ?.let { TranslationChapterKey(it.bookUrl, chapterIndex) }
-        if (key == observedTranslationKey && translationStatusJob?.isActive == true) {
-            return _uiState.value.translationStatus
-        }
-
-        translationStatusJob?.cancel()
-        val taskFlow = key?.let {
-            TranslationManager.getChapterTaskStateFlow(it.bookUrl, it.chapterIndex)
-        }
-        if (taskFlow == null) {
-            observedTranslationKey = null
-            return TranslationChapterStatus.Idle
-        }
-
-        observedTranslationKey = key
-        translationStatusJob = viewModelScope.launch {
-            taskFlow.takeWhile { taskState ->
-                if (observedTranslationKey == taskState.key) {
-                    _uiState.update { state ->
-                        state.copy(translationStatus = taskState.status)
-                    }
-                }
-                taskState.status == TranslationChapterStatus.Translating ||
-                    taskState.status == TranslationChapterStatus.Thinking
-            }.collect {}
-            if (observedTranslationKey == key) observedTranslationKey = null
-        }
-        return taskFlow.value.status
     }
 
     private fun calculateSeekProgress(): Int {
@@ -2230,6 +2174,11 @@ class ReadBookViewModel(
 
     private fun stopReadAloudForClose() {
         if (closeReadBookKeepReadAloud || !BaseReadAloudService.isRun) {
+            return
+        }
+        // 「退出阅读时继续后台朗读」：读的是持久设置，不依赖本次退出来源
+        // （标题栏关闭、返回手势、后台按钮走的是同一个 closeReadBook）。
+        if (readAloudSettingsRepository.currentSettings.keepReadAloudOnExit) {
             return
         }
         ReadAloud.stop(context)
@@ -2682,7 +2631,6 @@ class ReadBookViewModel(
     }
 
     override fun onCleared() {
-        translationStatusJob?.cancel()
         super.onCleared()
         if (BaseReadAloudService.isRun && BaseReadAloudService.pause) {
             ReadAloud.stop(context)
