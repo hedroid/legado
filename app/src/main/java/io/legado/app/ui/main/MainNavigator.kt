@@ -57,6 +57,19 @@ object MainNavigator {
         val currentRoute = backStack.lastOrNull()
         if (currentRoute == route) return
 
+        // "Read" in a detail page opened by the reader returns to that existing session.
+        if (route is MainRouteReadBook && currentRoute is MainRouteBookInfo) {
+            val readerIndex = backStack.indexOfLast {
+                it is MainRouteReadBook && it.bookUrl == route.bookUrl
+            }
+            if (readerIndex >= 0) {
+                while (backStack.lastIndex > readerIndex) backStack.removeAt(backStack.lastIndex)
+                if (route.chapterChanged) backStack[readerIndex] = route
+                tracker?.onBackStackChanged(backStack)
+                return
+            }
+        }
+
         if (route is MainRouteReadManga) {
             val existingReaderIndex = backStack.indexOfLast { it is MainRouteReadManga }
             if (existingReaderIndex >= 0) {
@@ -68,6 +81,13 @@ object MainNavigator {
             }
         }
 
+        // 朗读通知的「回到正在读的书」不带 bookUrl（空即最后读过的那本），路由键和栈顶那份必然不相等。
+        // 栈顶已经是阅读页时再压一份，返回就要连点同样多次才出得了阅读页，所以在这里收住不压栈。
+        if (route is MainRouteReadBook &&
+            currentRoute is MainRouteReadBook &&
+            (route.bookUrl == null || route.bookUrl == currentRoute.bookUrl)
+        ) return
+
         if (route is MainRouteReadBook) ReaderPerfTrace.marker("open.request")
         // 导航动画和阅读页组合要花几百毫秒, 这段时间足够把正文读出来并排版好
         if (route is MainRouteReadBook && !route.chapterChanged) {
@@ -75,6 +95,10 @@ object MainNavigator {
         }
 
         when (route) {
+            is MainRouteToc,
+            is MainRouteBookInfoEdit,
+            is MainRouteReplaceRules,
+            is MainRouteReplaceEdit -> backStack.add(route)
             is MainRouteSourceLogin -> {
                 backStack.add(route)
             }
@@ -87,6 +111,8 @@ object MainNavigator {
             is MainRouteRssSourceEdit,
             is MainRouteBookSourceDebug,
             is MainRouteRssSourceDebug -> backStack.add(route)
+
+            MainRouteReadAloudPlayer -> backStack.add(route)
 
             MainRouteHome -> {
                 backStack.clear()
@@ -178,18 +204,6 @@ object MainNavigator {
                 backStack.add(route)
             }
 
-            MainRouteReadAloudPlayer -> {
-                // 单例语义：已在栈上则回到那一层，避免重复按媒体键叠出多个播放界面
-                val existingPlayerIndex = backStack.indexOfLast { it is MainRouteReadAloudPlayer }
-                if (existingPlayerIndex >= 0) {
-                    while (backStack.lastIndex > existingPlayerIndex) {
-                        backStack.removeAt(backStack.lastIndex)
-                    }
-                } else {
-                    backStack.add(route)
-                }
-            }
-
             is MainRouteSearch -> {
                 if (
                     currentRoute == MainRouteHome ||
@@ -213,6 +227,7 @@ object MainNavigator {
                     currentRoute is MainRouteExploreShow ||
                     currentRoute is MainRouteBookInfo ||
                     currentRoute is MainRouteCache ||
+                    currentRoute is MainRouteReadBook ||
                     currentRoute is MainRouteReadManga
                 ) {
                     backStack.add(route)
@@ -311,6 +326,7 @@ object MainNavigator {
             }
 
             MainRouteHighlightTagRule,
+            MainRouteMultiRoleRule,
             MainRouteReadRecord -> {
                 if (currentRoute == MainRouteHome) {
                     backStack.add(route)
@@ -320,6 +336,14 @@ object MainNavigator {
                     backStack.add(route)
                 }
             }
+
+            // 多角色规则的子页只由 hub 用 backStack.add 压栈；这里保底直推，不清栈
+            MainRouteVoicePool,
+            MainRouteBgmPool,
+            MainRouteVoiceEffect,
+            MainRouteCastCapsuleStyle,
+            MainRouteRegexCastRule,
+            MainRouteMultiRoleRecognition -> backStack.add(route)
 
             MainRouteAbout -> {
                 if (currentRoute == MainRouteHome) {
@@ -345,32 +369,34 @@ object MainNavigator {
         tracker?.onBackStackChanged(backStack)
     }
 
-    fun navigateBack(activity: Activity, backStack: MutableList<NavKey>) {
-        navigateBack(activity, backStack, null)
-    }
-
-    /** [tracker] 非空时同步栈顶快照，供 Activity 级叠层立即重算显隐。 */
     fun navigateBack(
         activity: Activity,
         backStack: MutableList<NavKey>,
-        tracker: MainNavRouteTracker?,
-    ) {
-        if (backNavigationInProgress) {
-            return
+        tracker: MainNavRouteTracker? = null,
+        fromRoute: NavKey? = null,
+    ): Boolean {
+        if (fromRoute != null) {
+            if (backStack.lastOrNull() != fromRoute) {
+                return false
+            }
+        } else if (backNavigationInProgress) {
+            return false
         }
         if (backStack.size > 1) {
             backNavigationInProgress = true
             backStack.removeLastOrNull()
             tracker?.onBackStackChanged(backStack)
+            return true
         } else {
             activity.finish()
+            return true
         }
     }
 
     fun onBackStackChanged() {
         backNavigationResetJob?.cancel()
         backNavigationResetJob = navigationScope.launch {
-            delay(500)
+            delay(100)
             backNavigationInProgress = false
         }
     }

@@ -2,13 +2,30 @@ package io.legado.app.ui.main
 
 import androidx.navigation3.runtime.NavKey
 import io.legado.app.ui.login.SourceLoginType
+import io.legado.app.ui.replace.ReplaceEditRoute
 import kotlinx.serialization.Serializable
 
 @Serializable
 sealed interface MainRoute : NavKey
 
 @Serializable
+data class MainRouteToc(val bookUrl: String, val initialPage: Int = 0) : MainRoute
+
+@Serializable
+data class MainRouteBookInfoEdit(val bookUrl: String) : MainRoute
+
+@Serializable
+data class MainRouteReplaceRules(val bookUrl: String? = null) : MainRoute
+
+@Serializable
+data class MainRouteReplaceEdit(val editor: ReplaceEditRoute) : MainRoute
+
+@Serializable
 data object MainRouteHome : MainRoute
+
+/** 只兼容旧版本保存的导航栈，新入口使用 Activity 播放浮层。 */
+@Serializable
+data object MainRouteReadAloudPlayer : MainRoute
 
 @Serializable
 data class MainRouteSourceLogin(
@@ -155,13 +172,6 @@ data class MainRouteAudioPlay(
     val sharedCoverKey: String? = null,
 ) : MainRoute
 
-/**
- * 听书播放界面。单例语义：可从阅读界面、悬浮胶囊或媒体按键在任意界面之上打开，
- * 重复进入只替换不叠加。
- */
-@Serializable
-data object MainRouteReadAloudPlayer : MainRoute
-
 @Serializable
 data class MainRouteSearch(
     val key: String?,
@@ -176,6 +186,8 @@ data class MainRouteBookInfo(
     val origin: String? = null,
     val coverPath: String? = null,
     val sharedCoverKey: String? = null,
+    val useCoverMorph: Boolean = true,
+    val openRequestId: Long = 0L,
 ) : MainRoute
 
 @Serializable
@@ -250,6 +262,34 @@ data class MainRouteSearchContent(
 
 @Serializable
 data object MainRouteHighlightTagRule : MainRoute
+
+/** 多角色规则 hub：声音池 / 多角色识别。 */
+@Serializable
+data object MainRouteMultiRoleRule : MainRoute
+
+/** 多角色规则 → 声音池：池与池内音色管理。 */
+@Serializable
+data object MainRouteVoicePool : MainRoute
+
+/** 多角色规则 → 背景音乐池：导入的配乐文件管理，朗读时可作背景音。 */
+@Serializable
+data object MainRouteBgmPool : MainRoute
+
+/** 多角色规则 → 多角色识别：标记包裹符号与声音池分隔符号配置。 */
+@Serializable
+data object MainRouteMultiRoleRecognition : MainRoute
+
+/** 朗读规则 → 变声器：音高/混响预设管理，角色配音时可选。 */
+@Serializable
+data object MainRouteVoiceEffect : MainRoute
+
+/** 朗读规则 → 朗读胶囊设置：三类胶囊的圆角、背景与头像形状位置。 */
+@Serializable
+data object MainRouteCastCapsuleStyle : MainRoute
+
+/** 朗读规则 → 正则角色管理：命中正文文字换音色 / 不念改放音效。 */
+@Serializable
+data object MainRouteRegexCastRule : MainRoute
 
 @Serializable
 data object MainRouteAbout : MainRoute

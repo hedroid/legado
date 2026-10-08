@@ -301,7 +301,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.viewbinding)
     implementation(libs.androidx.navigation3.runtime)
     implementation(libs.androidx.navigation3.ui)
-    // 直接声明并抬高 navigationevent 版本，覆盖 navigation3 传递依赖的 1.1.2（预测式返回崩溃）
+    // 显式保持 navigationevent 1.2 系列，保留已分离输入的预测式返回崩溃修复。
     implementation(libs.androidx.navigationevent)
     implementation(libs.androidx.navigationevent.compose)
     implementation(libs.androidx.compose.adaptive)
@@ -328,4 +328,13 @@ dependencies {
     implementation(libs.backdrop)
     implementation(libs.lyricViewx)
     implementation(libs.timber)
+}
+
+// 每个测试类独占一个 JVM，并且不并行 fork。Robolectric + Compose 动画这一批用例靠推进主线程
+// shadow looper 判定长按阈值与预测式返回的时序：前一个类留下的调度队列会让后一个类推不到阈值；
+// 多个 fork 并发抢 CPU 时，动画协程赶不上断言（`progress` 停在起始值、`running=false`），
+// 同一套代码会在不同批次的类上随机报错。隔离与串行是这类用例成立的前提。
+tasks.withType<Test>().configureEach {
+    forkEvery = 1
+    maxParallelForks = 1
 }
