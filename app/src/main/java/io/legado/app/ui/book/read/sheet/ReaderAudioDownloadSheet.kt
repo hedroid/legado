@@ -25,8 +25,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -100,10 +98,12 @@ fun ReaderAudioDownloadSheet(
         value = withContext(Dispatchers.IO) { ReadAloudAudioStore.list(bookUrl) }
     }
     val downloaded = rows.orEmpty()
-    val currentChapterRow = rows?.firstOrNull { it.chapterIndex == ReadBook.durChapterIndex }
+    // 当前章每次重组重读：这张卡片常挂在阅读界面上，show 只是开关，存快照会把章号钉在进阅读器那一章
+    val currentChapterIndex = ReadBook.durChapterIndex
+    val currentChapterRow = rows?.firstOrNull { it.chapterIndex == currentChapterIndex }
     var byRange by remember { mutableStateOf(false) }
-    var startText by remember { mutableStateOf((ReadBook.durChapterIndex + 1).toString()) }
-    var endText by remember { mutableStateOf((ReadBook.durChapterIndex + 1).toString()) }
+    var startText by remember(currentChapterIndex) { mutableStateOf((currentChapterIndex + 1).toString()) }
+    var endText by remember(currentChapterIndex) { mutableStateOf((currentChapterIndex + 1).toString()) }
     val range = downloadRange(byRange, startText, endText, chapterCount)
 
     CastImeScope {
@@ -135,12 +135,11 @@ fun ReaderAudioDownloadSheet(
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = onDismissRequest) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = stringResource(R.string.back),
-                            )
-                        }
+                        MediumTonalButton(
+                            onClick = onDismissRequest,
+                            icon = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.back),
+                        )
                         AppText(
                             text = stringResource(R.string.read_aloud_audio_download_entry),
                             modifier = Modifier.padding(start = 4.dp),
@@ -470,12 +469,10 @@ private fun DownloadedRow(
             style = LegadoTheme.typography.labelSmall,
             color = LegadoTheme.colorScheme.onSurfaceVariant,
         )
-        IconButton(onClick = onDelete) {
-            Icon(
-                Icons.Default.Delete,
-                contentDescription = stringResource(R.string.read_aloud_audio_download_delete),
-                tint = LegadoTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        MediumTonalButton(
+            onClick = onDelete,
+            icon = Icons.Default.Delete,
+            contentDescription = stringResource(R.string.read_aloud_audio_download_delete),
+        )
     }
 }
