@@ -66,6 +66,7 @@ import io.legado.app.ui.widget.components.topbar.GlassTopAppBarScrollBehavior
 import io.legado.app.ui.widget.components.topbar.TopBarActionButton
 import io.legado.app.ui.widget.components.topbar.TopBarNavigationButton
 import io.legado.app.ui.widget.components.topbar.TopBarTextActionButton
+import io.legado.app.utils.StringUtils
 import io.legado.app.utils.toastOnUi
 import org.koin.androidx.compose.koinViewModel
 import splitties.init.appCtx
@@ -420,7 +421,8 @@ fun ExploreShowScreen(
             topBar = {
                 GlassMediumFlexibleTopAppBar(
                     modifier = Modifier.responsiveHazeEffect(state = hazeState),
-                    title = state.selectedKindTitle ?: title,
+                    // 书源分类名常夹带装饰性符号（如 ★xx::yy【】），顶栏统一整理后再显示
+                    title = StringUtils.formatCategoryTitle(state.selectedKindTitle ?: title),
                     navigationIcon = { TopBarNavigationButton(onClick = onBack) },
                     actions = {
                         // 列表 / 网格切换与列数都收进同一个 sheet，顶栏只留一个入口。

@@ -24,6 +24,64 @@ object StringUtils {
     private const val DAY_OF_YESTERDAY = 2
     private const val TIME_UNIT = 60
     private val ChnMap = chnMap
+    // 西文单词内部的连接符，夹在 ASCII 字母数字之间时原样保留（如 Sci-Fi、AT&T、24/7）
+    private const val AsciiConnectors = "-/&+'’"
+
+    /**
+     * 整理栏目标题用于顶栏展示：首尾的特殊符号与空格去掉；中间连续的特殊符号
+     * 压缩成单个分隔符——涉及中文用「·」，纯西文用空格；中文之间夹杂的空格去掉。
+     */
+    fun formatCategoryTitle(raw: String?): String {
+        if (raw.isNullOrBlank()) return ""
+        val builder = StringBuilder(raw.length)
+        var pendingSymbols = 0
+        var pendingSpaces = 0
+        var pendingSingleSymbol = ' '
+
+        fun flushSeparator(next: Char) {
+            val prev = builder.last()
+            when {
+                pendingSymbols == 0 ->
+                    if (!(prev.isHanChar() && next.isHanChar())) builder.append(' ')
+
+                pendingSymbols == 1 && pendingSingleSymbol in AsciiConnectors &&
+                    prev.isAsciiLetterOrDigit() && next.isAsciiLetterOrDigit() ->
+                    builder.append(pendingSingleSymbol)
+
+                prev.isHanChar() || next.isHanChar() -> builder.append('·')
+
+                else -> builder.append(' ')
+            }
+        }
+
+        for (c in raw) {
+            when {
+                c.isLetter() || c.isDigit() -> {
+                    if (pendingSymbols > 0 || pendingSpaces > 0) {
+                        if (builder.isNotEmpty()) flushSeparator(c)
+                        pendingSymbols = 0
+                        pendingSpaces = 0
+                    }
+                    builder.append(c)
+                }
+
+                c.isWhitespace() -> pendingSpaces++
+
+                else -> {
+                    if (pendingSymbols == 0) pendingSingleSymbol = c
+                    pendingSymbols++
+                }
+            }
+        }
+        // 结尾残留的分隔符直接丢弃；全是符号的标题原样保留，避免顶栏空白
+        return builder.toString().ifBlank { raw.trim() }
+    }
+
+    private fun Char.isHanChar(): Boolean =
+        Character.UnicodeScript.of(code) == Character.UnicodeScript.HAN
+
+    private fun Char.isAsciiLetterOrDigit(): Boolean =
+        this in '0'..'9' || this in 'A'..'Z' || this in 'a'..'z'
     private val wordCountFormatter by lazy {
         DecimalFormat("#.#")
     }
