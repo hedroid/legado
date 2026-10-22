@@ -1,0 +1,49 @@
+{
+  "tag_name": "3.26.18-beta.1",
+  "name": "Pre-release 3.26.18-beta.1",
+  "body": "**此版本为测试版，会存在不稳定问题。**\n### [发布页](https://t.me/materado)\n### [反馈群组](https://t.me/+Yn1_v5PZqddmMjQ1)\n\n### 更新内容\n\n* Prepare 3.26.18 pre-release\n* feat(explore): 顶栏分类名去除首尾符号并整理内部杂乱分隔\n* 咕噜噜\n* feat: 阅读界面优化\n* feat: 添加阻止书源打开选项 在搞基里\n* feat:优化听书界面\n* fix(about): 优化检测更新弹窗，将更新按钮移至底部常驻 (#2447)\n* fix(test): 移除ReadBookViewModel多余空行以满足2748行架构测试上限\n* fix(readaloud): 修复HTTP朗读在当前章未完成时抢占预合成导致的断流卡顿\n* fix(about): 优化检测更新弹窗，将更新按钮移至底部常驻\n* fix(reader): keep word spaces at line end when wrapping English text\n* feat: 呱\n* feat: 呱\n* feat: 优化\n* feat: 优化\n* fix(read-aloud): preserve pause across paragraph resume\n* fix(reader): 角色胶囊与整串标点不再把一行顶出空洞\n* fix(read-aloud): 段落间隔不再重建本章合成任务，纯符号段不再被跳过\n\n**Full Changelog**: https://github.com/hedroid/legado/compare/3.26.16...3.26.18-beta.1",
+  "prerelease": true,
+  "created_at": "2026-10-22T03:31:04Z",
+  "assets": [
+    {
+      "browser_download_url": "https://github.com/hedroid/legado/releases/download/3.26.18-beta.1/legado-3.26.18-beta.1-arm64-v8a.apk",
+      "content_type": "application/vnd.android.package-archive",
+      "created_at": "2026-10-22T03:48:51Z",
+      "download_count": 0,
+      "id": 664590825,
+      "name": "legado-3.26.18-beta.1-arm64-v8a.apk",
+      "state": "uploaded",
+      "url": "https://api.github.com/repos/hedroid/legado/releases/assets/664590825"
+    },
+    {
+      "browser_download_url": "https://github.com/hedroid/legado/releases/download/3.26.18-beta.1/legado-3.26.18-beta.1-armeabi-v7a.apk",
+      "content_type": "application/vnd.android.package-archive",
+      "created_at": "2026-10-22T03:48:51Z",
+      "download_count": 0,
+      "id": 664590828,
+      "name": "legado-3.26.18-beta.1-armeabi-v7a.apk",
+      "state": "uploaded",
+      "url": "https://api.github.com/repos/hedroid/legado/releases/assets/664590828"
+    },
+    {
+      "browser_download_url": "https://github.com/hedroid/legado/releases/download/3.26.18-beta.1/legado-3.26.18-beta.1.apk",
+      "content_type": "application/vnd.android.package-archive",
+      "created_at": "2026-10-22T03:48:51Z",
+      "download_count": 0,
+      "id": 664590827,
+      "name": "legado-3.26.18-beta.1.apk",
+      "state": "uploaded",
+      "url": "https://api.github.com/repos/hedroid/legado/releases/assets/664590827"
+    },
+    {
+      "browser_download_url": "https://github.com/hedroid/legado/releases/download/3.26.18-beta.1/mapping.txt",
+      "content_type": "text/plain",
+      "created_at": "2026-10-22T03:48:51Z",
+      "download_count": 0,
+      "id": 664590826,
+      "name": "mapping.txt",
+      "state": "uploaded",
+      "url": "https://api.github.com/repos/hedroid/legado/releases/assets/664590826"
+    }
+  ]
+}
