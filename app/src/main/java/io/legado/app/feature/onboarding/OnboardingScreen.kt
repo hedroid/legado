@@ -47,6 +47,7 @@ import io.legado.app.ui.widget.components.progressIndicator.AppCircularProgressI
 import io.legado.app.ui.widget.components.progressIndicator.AppLinearProgressIndicator
 import io.legado.app.ui.widget.components.text.AppText
 import io.legado.app.ui.widget.components.text.MarkdownBlock
+import io.legado.app.utils.RealPathUtil
 
 @Composable
 fun OnboardingScreen(
@@ -307,6 +308,8 @@ private fun BookFolderPage(state: OnboardingUiState, onIntent: (OnboardingIntent
         )
         AppText(
             text = state.bookFolderUri
+                ?.takeIf(String::isNotBlank)
+                ?.let(RealPathUtil::getDisplayPath)
                 ?: stringResource(R.string.welcome_book_folder_not_selected),
             style = LegadoTheme.typography.bodySmall,
             color = LegadoTheme.colorScheme.onSurfaceVariant,

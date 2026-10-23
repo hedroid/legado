@@ -103,6 +103,24 @@ object RealPathUtil {
     }
 
     /**
+     * SAF 目录 URI 转可读路径，供界面展示；解析失败时回退原始字符串，
+     * 避免 content://...%3A%2F... 编码态直接上屏
+     */
+    fun getDisplayPath(path: String): String {
+        val uri = Uri.parse(path)
+        return runCatching {
+            getTreePath(uri)
+                ?: if (DocumentsContract.isTreeUri(uri)) {
+                    DocumentsContract.getTreeDocumentId(uri)
+                        .substringAfter(':')
+                        .takeIf(String::isNotBlank)
+                } else {
+                    null
+                }
+        }.getOrNull()?.takeIf(String::isNotBlank) ?: path
+    }
+
+    /**
      * Get the value of the data column for this Uri. This is useful for
      * MediaStore Uris, and other file-based ContentProviders.
      *

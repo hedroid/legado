@@ -1,7 +1,5 @@
 package io.legado.app.ui.config.backupConfig
 
-import android.net.Uri
-import android.provider.DocumentsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -236,7 +234,7 @@ fun BackupConfigScreen(
                     ClickableSettingItem(
                         title = stringResource(R.string.backup_path),
                         description = settings.backupPath
-                            ?.let(::displayBackupPath)
+                            ?.let(RealPathUtil::getDisplayPath)
                             ?: stringResource(R.string.select_backup_path),
                         onClick = {
                             onIntent(BackupConfigIntent.OpenSheet(BackupConfigSheet.ChooseBackupPath))
@@ -284,20 +282,6 @@ fun BackupConfigScreen(
 
     BackupConfigSheets(state, onIntent)
     BackupConfigDialogs(state, onIntent)
-}
-
-private fun displayBackupPath(path: String): String {
-    val uri = Uri.parse(path)
-    return runCatching {
-        RealPathUtil.getTreePath(uri)
-            ?: if (DocumentsContract.isTreeUri(uri)) {
-                DocumentsContract.getTreeDocumentId(uri)
-                    .substringAfter(':')
-                    .takeIf(String::isNotBlank)
-            } else {
-                null
-            }
-    }.getOrNull()?.takeIf(String::isNotBlank) ?: path
 }
 
 @Composable

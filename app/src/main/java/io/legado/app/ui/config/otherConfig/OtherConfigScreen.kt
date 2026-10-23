@@ -20,6 +20,7 @@ import io.legado.app.ui.widget.components.settingItem.SwitchSettingItem
 import io.legado.app.ui.widget.components.topbar.GlassMediumFlexibleTopAppBar
 import io.legado.app.ui.widget.components.topbar.GlassTopAppBarDefaults
 import io.legado.app.ui.widget.components.topbar.TopBarNavigationButton
+import io.legado.app.utils.RealPathUtil
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -103,7 +104,9 @@ fun OtherConfigScreen(
 
                 ClickableSettingItem(
                     title = stringResource(R.string.book_tree_uri_t),
-                    description = state.defaultBookTreeUri,
+                    description = state.defaultBookTreeUri
+                        ?.takeIf(String::isNotBlank)
+                        ?.let(RealPathUtil::getDisplayPath),
                     onClick = { onIntent(OtherConfigIntent.ShowOverlay(OtherConfigOverlay.FilePicker)) }
                 )
 
